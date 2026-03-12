@@ -14,6 +14,13 @@ interface UpdateLocationInput {
   payload: UpdateLocationDto;
 }
 
+interface TrackerDeviceLike {
+  id: string;
+  code: string;
+  vehicleCode: string | null;
+  teamCode: string | null;
+}
+
 @Injectable()
 export class TrackingService {
   constructor(private readonly prisma: PrismaService) {}
@@ -99,59 +106,35 @@ export class TrackingService {
     const route = await this.getOrCreateRoute(input.payload.routeCode);
     const capturedAt = input.payload.capturedAt ?? new Date();
 
-    await this.prisma.$transaction([
-      this.prisma.currentLocation.upsert({
-        where: { routeId: route.id },
-        update: {
-          deviceId: device.id,
-          vehicleCode: input.payload.vehicleCode ?? device.vehicleCode ?? null,
-          teamCode: input.payload.teamCode ?? device.teamCode ?? null,
-          lat: input.payload.lat,
-          lng: input.payload.lng,
-          speed: input.payload.speed ?? null,
-          accuracy: input.payload.accuracy ?? null,
-          capturedAt
-        },
-        create: {
-          routeId: route.id,
-          deviceId: device.id,
-          vehicleCode: input.payload.vehicleCode ?? device.vehicleCode ?? null,
-          teamCode: input.payload.teamCode ?? device.teamCode ?? null,
-          lat: input.payload.lat,
-          lng: input.payload.lng,
-          speed: input.payload.speed ?? null,
-          accuracy: input.payload.accuracy ?? null,
-          capturedAt
-        }
-      }),
-      this.prisma.locationHistory.create({
-        data: {
-          routeId: route.id,
-          deviceId: device.id,
-          vehicleCode: input.payload.vehicleCode ?? device.vehicleCode ?? null,
-          teamCode: input.payload.teamCode ?? device.teamCode ?? null,
-          lat: input.payload.lat,
-          lng: input.payload.lng,
-          speed: input.payload.speed ?? null,
-          accuracy: input.payload.accuracy ?? null,
-          capturedAt
-        }
-      }),
-      this.prisma.trackerDevice.update({
-        where: { id: device.id },
-        data: {
-          routeId: route.id,
-          vehicleCode: input.payload.vehicleCode ?? device.vehicleCode ?? null,
-          teamCode: input.payload.teamCode ?? device.teamCode ?? null
-        }
-      })
-    ]);
+    await this.persistLocation(route.id, input.payload, capturedAt, device);
 
     return {
       ok: true,
       routeCode: route.code,
       capturedAt,
       deviceCode: device.code
+    };
+  }
+
+  async updateLocationByAdmin(payload: UpdateLocationDto, _adminUserId: string) {
+    const route = await this.getOrCreateRoute(payload.routeCode);
+    const capturedAt = payload.capturedAt ?? new Date();
+
+    const device = await this.prisma.trackerDevice.findFirst({
+      where: {
+        isActive: true,
+        OR: [{ routeId: route.id }, { routeId: null }]
+      },
+      orderBy: [{ routeId: "desc" }, { createdAt: "asc" }]
+    });
+
+    await this.persistLocation(route.id, payload, capturedAt, device ?? undefined);
+
+    return {
+      ok: true,
+      routeCode: route.code,
+      capturedAt,
+      source: "admin"
     };
   }
 
@@ -188,6 +171,65 @@ export class TrackingService {
     }
 
     return device;
+  }
+
+  private async persistLocation(
+    routeId: string,
+    payload: UpdateLocationDto,
+    capturedAt: Date,
+    device?: TrackerDeviceLike
+  ) {
+    await this.prisma.$transaction([
+      this.prisma.currentLocation.upsert({
+        where: { routeId },
+        update: {
+          deviceId: device?.id ?? null,
+          vehicleCode: payload.vehicleCode ?? device?.vehicleCode ?? null,
+          teamCode: payload.teamCode ?? device?.teamCode ?? null,
+          lat: payload.lat,
+          lng: payload.lng,
+          speed: payload.speed ?? null,
+          accuracy: payload.accuracy ?? null,
+          capturedAt
+        },
+        create: {
+          routeId,
+          deviceId: device?.id ?? null,
+          vehicleCode: payload.vehicleCode ?? device?.vehicleCode ?? null,
+          teamCode: payload.teamCode ?? device?.teamCode ?? null,
+          lat: payload.lat,
+          lng: payload.lng,
+          speed: payload.speed ?? null,
+          accuracy: payload.accuracy ?? null,
+          capturedAt
+        }
+      }),
+      this.prisma.locationHistory.create({
+        data: {
+          routeId,
+          deviceId: device?.id ?? null,
+          vehicleCode: payload.vehicleCode ?? device?.vehicleCode ?? null,
+          teamCode: payload.teamCode ?? device?.teamCode ?? null,
+          lat: payload.lat,
+          lng: payload.lng,
+          speed: payload.speed ?? null,
+          accuracy: payload.accuracy ?? null,
+          capturedAt
+        }
+      }),
+      ...(device
+        ? [
+            this.prisma.trackerDevice.update({
+              where: { id: device.id },
+              data: {
+                routeId,
+                vehicleCode: payload.vehicleCode ?? device.vehicleCode ?? null,
+                teamCode: payload.teamCode ?? device.teamCode ?? null
+              }
+            })
+          ]
+        : [])
+    ]);
   }
 }
 

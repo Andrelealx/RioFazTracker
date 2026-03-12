@@ -501,8 +501,6 @@ function shouldSend(position) {
 
 function readManualConfig() {
   return {
-    deviceCode: document.getElementById("deviceCode").value.trim(),
-    deviceKey: document.getElementById("deviceKey").value.trim(),
     routeCode: document.getElementById("manualRouteCode").value.trim(),
     vehicleCode: document.getElementById("vehicleCode").value.trim() || undefined,
     teamCode: document.getElementById("teamCode").value.trim() || undefined
@@ -518,8 +516,8 @@ function syncManualRouteCode() {
 
 async function sendPosition(position) {
   const config = readManualConfig();
-  if (!config.deviceCode || !config.deviceKey || !config.routeCode) {
-    throw new Error("Preencha X-Device-Code, X-Device-Key e Rota.");
+  if (!config.routeCode) {
+    throw new Error("Preencha a rota para iniciar o tracker.");
   }
 
   const payload = {
@@ -533,12 +531,8 @@ async function sendPosition(position) {
     capturedAt: new Date(position.timestamp).toISOString()
   };
 
-  const result = await apiRequest("/tracking/location", {
+  const result = await apiRequest("/tracking/admin/location", {
     method: "POST",
-    headers: {
-      "X-Device-Code": config.deviceCode,
-      "X-Device-Key": config.deviceKey
-    },
     body: payload
   });
 

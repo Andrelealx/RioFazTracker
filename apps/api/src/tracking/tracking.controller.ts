@@ -1,4 +1,10 @@
-import { Body, Controller, Get, Headers, Post, Query } from "@nestjs/common";
+import { UserRole } from "@prisma/client";
+import { Body, Controller, Get, Headers, Post, Query, UseGuards } from "@nestjs/common";
+import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { AuthenticatedUser } from "../common/types/authenticated-user.type";
+import { Roles } from "../auth/decorators/roles.decorator";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RolesGuard } from "../auth/guards/roles.guard";
 import { HistoryQueryDto } from "./dto/history-query.dto";
 import { LocationQueryDto } from "./dto/location-query.dto";
 import { UpdateLocationDto } from "./dto/update-location.dto";
@@ -29,5 +35,15 @@ export class TrackingController {
       deviceKey,
       payload
     });
+  }
+
+  @Post("admin/location")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  updateLocationByAdmin(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() payload: UpdateLocationDto
+  ) {
+    return this.trackingService.updateLocationByAdmin(payload, user.id);
   }
 }
