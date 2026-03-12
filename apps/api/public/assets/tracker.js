@@ -112,8 +112,14 @@ async function refreshSession() {
 }
 
 function ensureMap() {
+  if (typeof window.L === "undefined") {
+    showStatus("Mapa indisponivel: biblioteca Leaflet nao carregou. Recarregue a pagina.", "warn");
+    appendLog("Leaflet nao carregado", {});
+    return false;
+  }
+
   if (state.map) {
-    return;
+    return true;
   }
 
   state.map = L.map("map").setView([-22.54, -42.99], 12);
@@ -121,6 +127,7 @@ function ensureMap() {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap"
   }).addTo(state.map);
+  return true;
 }
 
 function formatDate(value) {
@@ -545,7 +552,7 @@ async function loadRoutes() {
 }
 
 async function bootstrap() {
-  ensureMap();
+  const mapReady = ensureMap();
   clearStatus();
 
   const ok = await ensureAdminSession();
@@ -554,7 +561,9 @@ async function bootstrap() {
   }
 
   await loadRoutes();
-  await refreshMapData();
+  if (mapReady) {
+    await refreshMapData();
+  }
   startAutoRefresh();
 }
 
