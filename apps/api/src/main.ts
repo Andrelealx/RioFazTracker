@@ -36,7 +36,38 @@ async function bootstrap() {
     })
   );
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "https://unpkg.com"],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            "https://unpkg.com",
+            "https://fonts.googleapis.com"
+          ],
+          fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+          imgSrc: [
+            "'self'",
+            "data:",
+            "https://unpkg.com",
+            "https://a.tile.openstreetmap.org",
+            "https://b.tile.openstreetmap.org",
+            "https://c.tile.openstreetmap.org"
+          ],
+          connectSrc: [
+            "'self'",
+            "https://a.tile.openstreetmap.org",
+            "https://b.tile.openstreetmap.org",
+            "https://c.tile.openstreetmap.org"
+          ]
+        }
+      }
+    })
+  );
   app.use(cookieParser());
 
   const corsOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")

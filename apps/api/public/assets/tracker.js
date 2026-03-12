@@ -766,8 +766,8 @@ async function deleteScheduleForRoute(code, weekday) {
 }
 
 async function bootstrap() {
-  const mapReady = ensureMap();
   clearStatus();
+  const mapReady = ensureMap();
 
   const ok = await ensureAdminSession();
   if (!ok) {
