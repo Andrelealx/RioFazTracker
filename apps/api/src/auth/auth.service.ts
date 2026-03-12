@@ -205,8 +205,16 @@ export class AuthService {
     return this.configService.get<string>("REFRESH_COOKIE_NAME") || "riofaz_refresh";
   }
 
+  getAccessCookieName(): string {
+    return this.configService.get<string>("ACCESS_COOKIE_NAME") || "riofaz_access";
+  }
+
   getRefreshCookieMaxAgeMs(): number {
     return parseDurationToMs(this.getRefreshExpiresInRaw(), 7 * 24 * 60 * 60 * 1000);
+  }
+
+  getAccessCookieMaxAgeMs(): number {
+    return parseDurationToMs(this.getAccessExpiresInRaw(), 15 * 60 * 1000);
   }
 
   private async issueSession(user: User): Promise<AuthSessionResponse> {

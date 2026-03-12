@@ -1,14 +1,26 @@
 import "reflect-metadata";
 import fs from "node:fs";
 import path from "node:path";
+import { UserRole } from "@prisma/client";
 import { Logger, ValidationPipe } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
+import { JwtService } from "@nestjs/jwt";
 import { Request, Response, static as expressStatic } from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
+import { PrismaService } from "./prisma/prisma.service";
+
+interface TrackerGateContext {
+  accessCookieName: string;
+  accessSecret: string;
+  privateDirectory: string | null;
+  jwtService: JwtService;
+  prismaService: PrismaService;
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -50,18 +62,34 @@ async function bootstrap() {
 
   app.useGlobalFilters(new HttpExceptionFilter());
 
+  const configService = app.get(ConfigService);
+  const jwtService = app.get(JwtService);
+  const prismaService = app.get(PrismaService);
+
+  const trackerGate: TrackerGateContext = {
+    accessCookieName: configService.get<string>("ACCESS_COOKIE_NAME") || "riofaz_access",
+    accessSecret: configService.get<string>("JWT_ACCESS_SECRET") || "change_me_access_secret",
+    privateDirectory: resolvePrivateDirectory(),
+    jwtService,
+    prismaService
+  };
+
   const httpAdapter = app.getHttpAdapter().getInstance();
   const publicDirectory = resolvePublicDirectory();
 
   if (publicDirectory) {
-    httpAdapter.use(expressStatic(publicDirectory));
+    httpAdapter.get("/tracker", (request: Request, response: Response) => {
+      void serveTrackerPage(request, response, trackerGate);
+    });
+
+    httpAdapter.get("/tracker.html", (request: Request, response: Response) => {
+      void serveTrackerPage(request, response, trackerGate);
+    });
+
+    httpAdapter.use(expressStatic(publicDirectory, { index: false }));
 
     httpAdapter.get("/", (_request: Request, response: Response) => {
       response.sendFile(path.join(publicDirectory, "index.html"));
-    });
-
-    httpAdapter.get("/tracker", (_request: Request, response: Response) => {
-      response.sendFile(path.join(publicDirectory, "tracker.html"));
     });
   } else {
     httpAdapter.get("/", (_request: Request, response: Response) => {
@@ -82,7 +110,7 @@ async function bootstrap() {
         health: "/api/health",
         auth: ["/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/me"],
         citizen: ["/api/citizen/profile", "/api/citizen/dashboard"],
-        routes: ["/api/routes/info"],
+        routes: ["/api/routes/list", "/api/routes/info"],
         tracking: ["/api/tracking/location", "/api/tracking/history"]
       }
     });
@@ -95,11 +123,85 @@ async function bootstrap() {
 
 bootstrap();
 
+async function serveTrackerPage(
+  request: Request,
+  response: Response,
+  context: TrackerGateContext
+): Promise<void> {
+  if (!context.privateDirectory) {
+    response.status(404).json({ message: "Tracker page unavailable" });
+    return;
+  }
+
+  const accessToken = readAccessToken(request, context.accessCookieName);
+  if (!accessToken) {
+    response.redirect("/");
+    return;
+  }
+
+  try {
+    const payload = await context.jwtService.verifyAsync<{ sub: string; role?: UserRole }>(accessToken, {
+      secret: context.accessSecret
+    });
+
+    if (!payload?.sub) {
+      response.redirect("/");
+      return;
+    }
+
+    const user = await context.prismaService.user.findUnique({
+      where: { id: payload.sub }
+    });
+
+    if (!user || !user.isActive || user.role !== UserRole.ADMIN) {
+      response.status(403).send("Admin access required for tracker page.");
+      return;
+    }
+
+    response.sendFile(path.join(context.privateDirectory, "tracker.html"));
+  } catch {
+    response.redirect("/");
+  }
+}
+
+function readAccessToken(request: Request, accessCookieName: string): string | null {
+  const cookieToken = request.cookies?.[accessCookieName];
+  if (typeof cookieToken === "string" && cookieToken.length > 10) {
+    return cookieToken;
+  }
+
+  const authorizationHeader = request.headers.authorization;
+  if (typeof authorizationHeader === "string" && authorizationHeader.startsWith("Bearer ")) {
+    const headerToken = authorizationHeader.slice(7).trim();
+    if (headerToken.length > 10) {
+      return headerToken;
+    }
+  }
+
+  return null;
+}
+
 function resolvePublicDirectory(): string | null {
   const candidates = [
     path.resolve(process.cwd(), "apps/api/public"),
     path.resolve(process.cwd(), "public"),
     path.resolve(__dirname, "../public")
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function resolvePrivateDirectory(): string | null {
+  const candidates = [
+    path.resolve(process.cwd(), "apps/api/private"),
+    path.resolve(process.cwd(), "private"),
+    path.resolve(__dirname, "../private")
   ];
 
   for (const candidate of candidates) {

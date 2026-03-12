@@ -6,6 +6,44 @@ import { RouteInfoQueryDto } from "./dto/route-info-query.dto";
 export class RoutesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async listRoutes() {
+    const routes = await this.prisma.route.findMany({
+      include: {
+        neighborhood: true,
+        schedules: { orderBy: { weekday: "asc" } },
+        currentLocation: true
+      },
+      orderBy: { code: "asc" }
+    });
+
+    return routes.map((route) => ({
+      code: route.code,
+      name: route.name,
+      neighborhood: route.neighborhood
+        ? {
+            name: route.neighborhood.name,
+            city: route.neighborhood.city,
+            uf: route.neighborhood.uf
+          }
+        : null,
+      schedules: route.schedules.map((schedule) => ({
+        weekday: schedule.weekday,
+        timeStart: schedule.timeStart,
+        timeEnd: schedule.timeEnd
+      })),
+      currentLocation: route.currentLocation
+        ? {
+            lat: Number(route.currentLocation.lat),
+            lng: Number(route.currentLocation.lng),
+            speed: route.currentLocation.speed ? Number(route.currentLocation.speed) : null,
+            accuracy: route.currentLocation.accuracy ? Number(route.currentLocation.accuracy) : null,
+            capturedAt: route.currentLocation.capturedAt,
+            updatedAt: route.currentLocation.updatedAt
+          }
+        : null
+    }));
+  }
+
   async getRouteInfo(query: RouteInfoQueryDto) {
     const neighborhood = await this.prisma.neighborhood.findFirst({
       where: {

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ColetaGuapi | Tracker Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Sora:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="/assets/tracker.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <img src="/assets/coletaguapi-logo.png" alt="ColetaGuapi" />
+          <div>
+            <h1>Tracker administrativo</h1>
+            <p>Painel restrito para monitorar a frota em operacao</p>
+          </div>
+        </div>
+        <div class="actions">
+          <span id="adminBadge" class="pill"></span>
+          <a href="/" class="button ghost">Voltar ao painel</a>
+          <button id="logoutBtn" class="button warn" type="button">Sair</button>
+        </div>
+      </header>
+
+      <div id="statusBanner" class="status-banner"></div>
+
+      <section class="kpis">
+        <article class="kpi">
+          <div class="label">Rota monitorada</div>
+          <div id="kpiRoute" class="value">--</div>
+        </article>
+        <article class="kpi">
+          <div class="label">Status de sinal</div>
+          <div id="kpiSignal" class="value">--</div>
+        </article>
+        <article class="kpi">
+          <div class="label">Ultima captura</div>
+          <div id="kpiCapture" class="value">--</div>
+        </article>
+      </section>
+
+      <section class="layout">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>Mapa operacional em tempo real</h3>
+            <div class="mini-actions">
+              <select id="routeSelect"></select>
+              <button id="toggleAutoBtn" class="button ghost" type="button">Auto ON</button>
+              <button id="refreshBtn" class="button ghost" type="button">Atualizar</button>
+            </div>
+          </div>
+          <div id="map"></div>
+          <p id="mapMeta" class="meta">Carregando rotas...</p>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h3>Rotas cadastradas</h3>
+          </div>
+          <ul id="routeList" class="route-list"></ul>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Envio manual de localizacao (simulacao)</h3>
+        </div>
+        <form id="manualForm">
+          <div class="row">
+            <div class="field">
+              <label for="deviceCode">X-Device-Code</label>
+              <input id="deviceCode" placeholder="device-coleta1" required />
+            </div>
+            <div class="field">
+              <label for="deviceKey">X-Device-Key</label>
+              <input id="deviceKey" required />
+            </div>
+            <div class="field">
+              <label for="manualRouteCode">Rota</label>
+              <input id="manualRouteCode" placeholder="coleta1" required />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="vehicleCode">Veiculo</label>
+              <input id="vehicleCode" placeholder="caminhao-01" />
+            </div>
+            <div class="field">
+              <label for="teamCode">Equipe</label>
+              <input id="teamCode" placeholder="equipe-a" />
+            </div>
+          </div>
+          <div class="manual-actions">
+            <button id="sendNowBtn" class="button primary" type="button">Enviar local atual</button>
+            <button id="sendWatchBtn" class="button ghost" type="button">Iniciar envio continuo</button>
+            <button id="stopWatchBtn" class="button warn" type="button">Parar envio continuo</button>
+          </div>
+        </form>
+        <pre id="logOutput" class="log"></pre>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="/assets/tracker.js"></script>
+  </body>
+</html>

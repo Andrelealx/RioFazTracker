@@ -3,712 +3,229 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RioFazTracker</title>
+    <title>ColetaGuapi | Painel de Coleta</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Sora:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
-    <style>
-      :root {
-        --bg: #f3f7f8;
-        --card: #ffffff;
-        --text: #12263a;
-        --muted: #607286;
-        --primary: #1565c0;
-        --primary-dark: #0d47a1;
-        --ok: #2e7d32;
-        --warn: #ef6c00;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background: radial-gradient(circle at top right, #d5e9ff, #f6fbff 45%, #eff7f2);
-        color: var(--text);
-      }
-
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 24px 16px 40px;
-      }
-
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 16px;
-        flex-wrap: wrap;
-        margin-bottom: 16px;
-      }
-
-      .title {
-        margin: 0;
-        font-size: 30px;
-      }
-
-      .subtitle {
-        margin: 4px 0 0;
-        color: var(--muted);
-      }
-
-      .actions {
-        display: flex;
-        gap: 8px;
-      }
-
-      .grid {
-        display: grid;
-        gap: 16px;
-      }
-
-      .grid.two {
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      }
-
-      .card {
-        background: var(--card);
-        border-radius: 14px;
-        padding: 16px;
-        box-shadow: 0 8px 24px rgba(18, 38, 58, 0.08);
-      }
-
-      h2 {
-        margin-top: 0;
-      }
-
-      form {
-        display: grid;
-        gap: 10px;
-      }
-
-      label {
-        font-weight: 600;
-        font-size: 14px;
-      }
-
-      input,
-      button,
-      select {
-        width: 100%;
-        border: 1px solid #cad8e6;
-        border-radius: 10px;
-        padding: 10px 12px;
-        font-size: 14px;
-      }
-
-      button {
-        background: var(--primary);
-        color: white;
-        font-weight: 700;
-        border: none;
-        cursor: pointer;
-      }
-
-      button:hover {
-        background: var(--primary-dark);
-      }
-
-      button.secondary {
-        background: #e8eef6;
-        color: #1e3752;
-      }
-
-      button.secondary:hover {
-        background: #d9e5f2;
-      }
-
-      .row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 8px;
-      }
-
-      .status {
-        margin: 0 0 16px;
-        border-radius: 10px;
-        padding: 12px;
-        display: none;
-      }
-
-      .status.ok {
-        background: rgba(46, 125, 50, 0.12);
-        color: var(--ok);
-        display: block;
-      }
-
-      .status.warn {
-        background: rgba(239, 108, 0, 0.16);
-        color: var(--warn);
-        display: block;
-      }
-
-      .hidden {
-        display: none;
-      }
-
-      #map {
-        height: 360px;
-        border-radius: 12px;
-      }
-
-      .list {
-        margin: 0;
-        padding-left: 18px;
-      }
-
-      .next-box {
-        background: #eff7ff;
-        border: 1px solid #c9ddf3;
-        border-radius: 10px;
-        padding: 10px;
-      }
-    </style>
+    <link rel="stylesheet" href="/assets/app.css" />
   </head>
   <body>
-    <div class="container">
-      <header class="header">
-        <div>
-          <h1 class="title">RioFazTracker</h1>
-          <p class="subtitle">Portal cidadão + monitoramento em tempo real</p>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <img src="/assets/coletaguapi-logo.png" alt="ColetaGuapi" />
+          <div>
+            <h1>Painel ColetaGuapi</h1>
+            <p>Acompanhe os caminhoes de coleta seletiva em tempo real</p>
+          </div>
         </div>
-        <div class="actions">
-          <a href="/tracker"><button type="button" class="secondary">Abrir rastreador</button></a>
-          <button id="logoutBtn" type="button" class="secondary hidden">Sair</button>
+        <div class="top-actions">
+          <span id="userBadge" class="pill hidden"></span>
+          <a id="trackerLink" class="button ghost hidden" href="/tracker">Tracker Admin</a>
+          <button id="logoutBtn" class="button warn hidden" type="button">Sair</button>
         </div>
       </header>
 
-      <p id="status" class="status"></p>
+      <div id="statusBanner" class="status-banner"></div>
 
-      <section id="authSection" class="grid two">
-        <article class="card">
-          <h2>Entrar</h2>
-          <form id="loginForm">
-            <div>
-              <label for="loginIdentifier">E-mail ou telefone</label>
-              <input id="loginIdentifier" required />
-            </div>
-            <div>
-              <label for="loginPassword">Senha</label>
-              <input id="loginPassword" type="password" required />
-            </div>
-            <button type="submit">Acessar</button>
-          </form>
+      <section id="authShell" class="auth-shell">
+        <article class="hero">
+          <h2>Reciclar faz bem, monitorar faz diferenca</h2>
+          <p>
+            Plataforma para moradores acompanharem rota de coleta, manterem cadastro atualizado
+            e para a equipe operar com visibilidade total do servico.
+          </p>
+          <ul class="hero-list">
+            <li><span class="dot"></span> Mapa com atualizacao automatica</li>
+            <li><span class="dot"></span> Agenda por bairro e rota</li>
+            <li><span class="dot"></span> Acesso admin com tracker protegido</li>
+          </ul>
         </article>
 
         <article class="card">
-          <h2>Criar conta</h2>
-          <form id="registerForm">
-            <div>
-              <label for="registerName">Nome</label>
+          <div class="tabs">
+            <button id="tabLogin" type="button" class="tab-btn active">Entrar</button>
+            <button id="tabRegister" type="button" class="tab-btn">Cadastrar</button>
+          </div>
+
+          <form id="loginForm">
+            <div class="field">
+              <label for="loginIdentifier">Email ou telefone</label>
+              <input id="loginIdentifier" required />
+            </div>
+            <div class="field">
+              <label for="loginPassword">Senha</label>
+              <input id="loginPassword" type="password" minlength="6" required />
+            </div>
+            <button class="button primary" type="submit">Acessar plataforma</button>
+          </form>
+
+          <form id="registerForm" class="hidden">
+            <div class="field">
+              <label for="registerName">Nome completo</label>
               <input id="registerName" required />
             </div>
-            <div>
-              <label for="registerEmail">E-mail</label>
-              <input id="registerEmail" type="email" />
+            <div class="row">
+              <div class="field">
+                <label for="registerEmail">Email</label>
+                <input id="registerEmail" type="email" />
+              </div>
+              <div class="field">
+                <label for="registerPhone">Telefone (numeros)</label>
+                <input id="registerPhone" placeholder="21999999999" />
+              </div>
             </div>
-            <div>
-              <label for="registerPhone">Telefone (somente números)</label>
-              <input id="registerPhone" placeholder="21999999999" />
-            </div>
-            <div>
+            <div class="field">
               <label for="registerPassword">Senha</label>
               <input id="registerPassword" type="password" minlength="6" required />
             </div>
-            <button type="submit">Cadastrar</button>
+            <button class="button primary" type="submit">Criar conta</button>
           </form>
         </article>
       </section>
 
-      <section id="dashboardSection" class="grid hidden">
-        <article class="card">
-          <h2>Perfil do cidadão</h2>
-          <form id="profileForm">
-            <div class="row">
-              <div>
+      <section id="dashboardShell" class="dashboard hidden">
+        <div class="kpis">
+          <article class="kpi">
+            <div class="label">Proxima coleta</div>
+            <div id="kpiNextPickup" class="value">Sem agenda vinculada</div>
+          </article>
+          <article class="kpi">
+            <div class="label">Status da rota</div>
+            <div id="kpiRouteStatus" class="value">Aguardando rota</div>
+          </article>
+          <article class="kpi">
+            <div class="label">Ultima atualizacao</div>
+            <div id="kpiLastUpdate" class="value">--</div>
+          </article>
+        </div>
+
+        <div class="layout">
+          <article class="panel">
+            <div class="panel-head">
+              <h3>Mapa de coleta em tempo real</h3>
+              <div class="mini-actions">
+                <select id="routeSelect"></select>
+                <button id="toggleAutoBtn" class="button ghost" type="button">Auto ON</button>
+                <button id="refreshNowBtn" class="button ghost" type="button">Atualizar</button>
+              </div>
+            </div>
+            <div id="liveMap"></div>
+            <p id="mapMeta" class="meta">Selecione uma rota para iniciar o acompanhamento.</p>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h3>Perfil do morador</h3>
+            </div>
+            <form id="profileForm">
+              <div class="field">
                 <label for="profileName">Nome</label>
                 <input id="profileName" required />
               </div>
-              <div>
-                <label for="profilePhone">Telefone (somente números)</label>
+              <div class="field">
+                <label for="profilePhone">Telefone</label>
                 <input id="profilePhone" required />
               </div>
-              <div>
-                <label for="profileNotifyEnabled">Notificação</label>
-                <select id="profileNotifyEnabled">
-                  <option value="true">Ativada</option>
-                  <option value="false">Desativada</option>
-                </select>
+              <div class="row">
+                <div class="field">
+                  <label for="profileNotifyEnabled">Notificacao</label>
+                  <select id="profileNotifyEnabled">
+                    <option value="true">Ativa</option>
+                    <option value="false">Inativa</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="profileNotifyMeters">Raio (m)</label>
+                  <input id="profileNotifyMeters" type="number" min="50" max="5000" />
+                </div>
               </div>
-              <div>
-                <label for="profileNotifyMeters">Raio (m)</label>
-                <input id="profileNotifyMeters" type="number" min="50" max="5000" />
-              </div>
-            </div>
-
-            <div class="row">
-              <div>
+              <div class="field">
                 <label for="addrCep">CEP</label>
                 <input id="addrCep" required />
               </div>
-              <div>
+              <div class="field">
                 <label for="addrStreet">Logradouro</label>
                 <input id="addrStreet" required />
               </div>
-              <div>
-                <label for="addrNumber">Número</label>
-                <input id="addrNumber" />
+              <div class="row">
+                <div class="field">
+                  <label for="addrNumber">Numero</label>
+                  <input id="addrNumber" />
+                </div>
+                <div class="field">
+                  <label for="addrComplement">Complemento</label>
+                  <input id="addrComplement" />
+                </div>
               </div>
-              <div>
-                <label for="addrComplement">Complemento</label>
-                <input id="addrComplement" />
-              </div>
-            </div>
-
-            <div class="row">
-              <div>
+              <div class="field">
                 <label for="addrNeighborhood">Bairro</label>
                 <input id="addrNeighborhood" required />
               </div>
-              <div>
-                <label for="addrCity">Cidade</label>
-                <input id="addrCity" required />
+              <div class="row">
+                <div class="field">
+                  <label for="addrCity">Cidade</label>
+                  <input id="addrCity" required />
+                </div>
+                <div class="field">
+                  <label for="addrUf">UF</label>
+                  <input id="addrUf" maxlength="2" required />
+                </div>
               </div>
-              <div>
-                <label for="addrUf">UF</label>
-                <input id="addrUf" maxlength="2" required />
-              </div>
-              <div>
-                <label for="addrLat">Latitude</label>
-                <input id="addrLat" type="number" step="0.0000001" />
-              </div>
-              <div>
-                <label for="addrLng">Longitude</label>
-                <input id="addrLng" type="number" step="0.0000001" />
-              </div>
-            </div>
+              <button class="button primary" type="submit">Salvar perfil</button>
+            </form>
+          </article>
+        </div>
 
-            <button type="submit">Salvar perfil</button>
-          </form>
-        </article>
-
-        <article class="card">
-          <h2>Sua próxima coleta</h2>
-          <div id="nextPickup" class="next-box">Sem agenda vinculada.</div>
-          <h3>Rotas da sua região</h3>
-          <ul id="routeList" class="list"></ul>
-        </article>
-
-        <article class="card">
-          <h2>Consulta manual de rota por bairro</h2>
-          <form id="routeForm">
-            <div class="row">
-              <div>
-                <label for="routeBairro">Bairro</label>
-                <input id="routeBairro" required />
-              </div>
-              <div>
-                <label for="routeCity">Cidade</label>
-                <input id="routeCity" required />
-              </div>
-              <div>
-                <label for="routeUf">UF</label>
-                <input id="routeUf" maxlength="2" required />
-              </div>
+        <div class="layout">
+          <article class="panel">
+            <div class="panel-head">
+              <h3>Agenda da rota selecionada</h3>
             </div>
-            <button type="submit">Consultar</button>
-          </form>
-          <ul id="routeQueryResult" class="list"></ul>
-        </article>
+            <ul id="routeSchedule" class="route-table"></ul>
+          </article>
 
-        <article class="card">
-          <h2>Mapa em tempo real</h2>
-          <div class="row" style="margin-bottom: 10px">
-            <div>
-              <label for="trackRouteCode">Código da rota</label>
-              <input id="trackRouteCode" placeholder="coleta1" />
+          <article class="panel">
+            <div class="panel-head">
+              <h3>Consulta por bairro</h3>
             </div>
-            <div style="display: flex; align-items: end">
-              <button id="refreshLocationBtn" type="button">Atualizar posição</button>
-            </div>
-          </div>
-          <p id="locationInfo">Sem posição carregada.</p>
-          <div id="map"></div>
-        </article>
+            <form id="lookupForm">
+              <div class="field">
+                <label for="lookupBairro">Bairro</label>
+                <input id="lookupBairro" required />
+              </div>
+              <div class="row">
+                <div class="field">
+                  <label for="lookupCity">Cidade</label>
+                  <input id="lookupCity" required />
+                </div>
+                <div class="field">
+                  <label for="lookupUf">UF</label>
+                  <input id="lookupUf" maxlength="2" required />
+                </div>
+              </div>
+              <button class="button ghost" type="submit">Consultar rota</button>
+            </form>
+            <ul id="lookupResult" class="lookup-result"></ul>
+          </article>
+        </div>
       </section>
-    </div>
+    </main>
 
     <script
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script>
-      const state = {
-        accessToken: localStorage.getItem("riofaz_access_token"),
-        map: null,
-        marker: null
-      };
-
-      const statusEl = document.getElementById("status");
-      const authSection = document.getElementById("authSection");
-      const dashboardSection = document.getElementById("dashboardSection");
-      const logoutBtn = document.getElementById("logoutBtn");
-      const routeListEl = document.getElementById("routeList");
-      const nextPickupEl = document.getElementById("nextPickup");
-      const routeQueryResultEl = document.getElementById("routeQueryResult");
-      const locationInfoEl = document.getElementById("locationInfo");
-      const trackRouteCodeEl = document.getElementById("trackRouteCode");
-
-      function showStatus(message, type) {
-        statusEl.className = "status " + type;
-        statusEl.textContent = message;
-      }
-
-      function clearStatus() {
-        statusEl.className = "status";
-        statusEl.textContent = "";
-      }
-
-      function setLoggedIn(loggedIn) {
-        authSection.classList.toggle("hidden", loggedIn);
-        dashboardSection.classList.toggle("hidden", !loggedIn);
-        logoutBtn.classList.toggle("hidden", !loggedIn);
-      }
-
-      function setAccessToken(token) {
-        state.accessToken = token;
-        if (token) {
-          localStorage.setItem("riofaz_access_token", token);
-        } else {
-          localStorage.removeItem("riofaz_access_token");
-        }
-      }
-
-      async function apiRequest(path, options = {}) {
-        const method = options.method || "GET";
-        const auth = options.auth !== false;
-        const retry = options.retry !== false;
-        const headers = {
-          ...(options.headers || {})
-        };
-
-        if (options.body !== undefined) {
-          headers["Content-Type"] = "application/json";
-        }
-
-        if (auth && state.accessToken) {
-          headers.Authorization = `Bearer ${state.accessToken}`;
-        }
-
-        const response = await fetch(`/api${path}`, {
-          method,
-          headers,
-          body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-          credentials: "include"
-        });
-
-        if (response.status === 401 && auth && retry) {
-          const refreshed = await refreshSession();
-          if (refreshed) {
-            return apiRequest(path, { ...options, retry: false });
-          }
-        }
-
-        const contentType = response.headers.get("content-type") || "";
-        const payload = contentType.includes("application/json")
-          ? await response.json().catch(() => null)
-          : await response.text();
-
-        if (!response.ok) {
-          const message =
-            payload && typeof payload === "object" && payload.message
-              ? Array.isArray(payload.message)
-                ? payload.message.join(", ")
-                : payload.message
-              : `Erro HTTP ${response.status}`;
-          throw new Error(message);
-        }
-
-        return payload;
-      }
-
-      async function refreshSession() {
-        try {
-          const data = await apiRequest("/auth/refresh", {
-            method: "POST",
-            auth: false,
-            retry: false,
-            body: {}
-          });
-          if (data && data.accessToken) {
-            setAccessToken(data.accessToken);
-            return true;
-          }
-        } catch (_error) {
-          return false;
-        }
-        return false;
-      }
-
-      function initMap() {
-        state.map = L.map("map").setView([-22.541, -42.989], 12);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 19,
-          attribution: "&copy; OpenStreetMap"
-        }).addTo(state.map);
-      }
-
-      function placeMarker(lat, lng, popupText) {
-        if (!state.map) {
-          return;
-        }
-
-        if (!state.marker) {
-          state.marker = L.marker([lat, lng]).addTo(state.map);
-        } else {
-          state.marker.setLatLng([lat, lng]);
-        }
-
-        state.marker.bindPopup(popupText).openPopup();
-        state.map.setView([lat, lng], 15);
-      }
-
-      function formatDate(value) {
-        if (!value) {
-          return "N/A";
-        }
-        const date = new Date(value);
-        return date.toLocaleString("pt-BR");
-      }
-
-      function renderDashboard(data) {
-        const profile = data.profile || {};
-        const address = data.address || {};
-        const preferences = data.preferences || {};
-        const routes = data.routes || [];
-
-        document.getElementById("profileName").value = profile.name || "";
-        document.getElementById("profilePhone").value = profile.phoneE164 || "";
-        document.getElementById("profileNotifyEnabled").value = String(
-          preferences.notifyEnabled ?? false
-        );
-        document.getElementById("profileNotifyMeters").value =
-          preferences.notifyProximityMeters ?? 500;
-
-        document.getElementById("addrCep").value = address.cep || "";
-        document.getElementById("addrStreet").value = address.logradouro || "";
-        document.getElementById("addrNumber").value = address.numero || "";
-        document.getElementById("addrComplement").value = address.complemento || "";
-        document.getElementById("addrNeighborhood").value = address.bairro || "";
-        document.getElementById("addrCity").value = address.cidade || "";
-        document.getElementById("addrUf").value = address.uf || "";
-        document.getElementById("addrLat").value = address.lat ?? "";
-        document.getElementById("addrLng").value = address.lng ?? "";
-
-        routeListEl.innerHTML = "";
-        for (const route of routes) {
-          const item = document.createElement("li");
-          const schedules = (route.schedules || [])
-            .map((schedule) => `dia ${schedule.weekday} (${schedule.timeStart} - ${schedule.timeEnd})`)
-            .join("; ");
-          item.textContent = `${route.code} - ${route.name} ${schedules ? "- " + schedules : ""}`;
-          routeListEl.appendChild(item);
-        }
-
-        if (data.nextPickup) {
-          nextPickupEl.textContent = `${data.nextPickup.routeName} (${data.nextPickup.routeCode}) em ${formatDate(
-            data.nextPickup.datetime
-          )}`;
-        } else {
-          nextPickupEl.textContent = "Sem agenda vinculada para o endereço atual.";
-        }
-
-        if (routes.length > 0 && !trackRouteCodeEl.value) {
-          trackRouteCodeEl.value = routes[0].code;
-        }
-      }
-
-      async function loadDashboard() {
-        const dashboard = await apiRequest("/citizen/dashboard");
-        renderDashboard(dashboard);
-        setLoggedIn(true);
-      }
-
-      document.getElementById("loginForm").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        clearStatus();
-        try {
-          const data = await apiRequest("/auth/login", {
-            method: "POST",
-            auth: false,
-            body: {
-              identifier: document.getElementById("loginIdentifier").value,
-              password: document.getElementById("loginPassword").value
-            }
-          });
-          setAccessToken(data.accessToken);
-          await loadDashboard();
-          showStatus("Login realizado com sucesso.", "ok");
-        } catch (error) {
-          showStatus(error.message, "warn");
-        }
-      });
-
-      document.getElementById("registerForm").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        clearStatus();
-        try {
-          const data = await apiRequest("/auth/register", {
-            method: "POST",
-            auth: false,
-            body: {
-              name: document.getElementById("registerName").value,
-              email: document.getElementById("registerEmail").value || undefined,
-              phoneE164: document.getElementById("registerPhone").value || undefined,
-              password: document.getElementById("registerPassword").value
-            }
-          });
-          setAccessToken(data.accessToken);
-          await loadDashboard();
-          showStatus("Cadastro concluido e sessao iniciada.", "ok");
-        } catch (error) {
-          showStatus(error.message, "warn");
-        }
-      });
-
-      document.getElementById("profileForm").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        clearStatus();
-        try {
-          await apiRequest("/citizen/profile", {
-            method: "PUT",
-            body: {
-              name: document.getElementById("profileName").value,
-              phoneE164: document.getElementById("profilePhone").value.replace(/\D/g, ""),
-              notifyEnabled: document.getElementById("profileNotifyEnabled").value === "true",
-              notifyProximityMeters: Number(document.getElementById("profileNotifyMeters").value || "500"),
-              address: {
-                cep: document.getElementById("addrCep").value,
-                logradouro: document.getElementById("addrStreet").value,
-                numero: document.getElementById("addrNumber").value || undefined,
-                complemento: document.getElementById("addrComplement").value || undefined,
-                bairro: document.getElementById("addrNeighborhood").value,
-                cidade: document.getElementById("addrCity").value,
-                uf: document.getElementById("addrUf").value.toUpperCase(),
-                lat: document.getElementById("addrLat").value
-                  ? Number(document.getElementById("addrLat").value)
-                  : undefined,
-                lng: document.getElementById("addrLng").value
-                  ? Number(document.getElementById("addrLng").value)
-                  : undefined
-              }
-            }
-          });
-          await loadDashboard();
-          showStatus("Perfil atualizado com sucesso.", "ok");
-        } catch (error) {
-          showStatus(error.message, "warn");
-        }
-      });
-
-      document.getElementById("routeForm").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        clearStatus();
-        try {
-          const bairro = document.getElementById("routeBairro").value;
-          const city = document.getElementById("routeCity").value;
-          const uf = document.getElementById("routeUf").value.toUpperCase();
-          const query = new URLSearchParams({ bairro, city, uf });
-          const data = await apiRequest(`/routes/info?${query.toString()}`, { auth: false });
-
-          routeQueryResultEl.innerHTML = "";
-          if (!data.routes || data.routes.length === 0) {
-            const item = document.createElement("li");
-            item.textContent = "Nenhuma rota encontrada.";
-            routeQueryResultEl.appendChild(item);
-          } else {
-            for (const route of data.routes) {
-              const item = document.createElement("li");
-              const schedules = route.schedules
-                .map((schedule) => `dia ${schedule.weekday} (${schedule.timeStart} - ${schedule.timeEnd})`)
-                .join("; ");
-              item.textContent = `${route.code} - ${route.name} - ${schedules}`;
-              routeQueryResultEl.appendChild(item);
-            }
-          }
-        } catch (error) {
-          showStatus(error.message, "warn");
-        }
-      });
-
-      document
-        .getElementById("refreshLocationBtn")
-        .addEventListener("click", async () => {
-          clearStatus();
-          const routeCode = trackRouteCodeEl.value.trim();
-          if (!routeCode) {
-            showStatus("Informe um codigo de rota.", "warn");
-            return;
-          }
-
-          try {
-            const data = await apiRequest(
-              `/tracking/location?${new URLSearchParams({ routeCode }).toString()}`,
-              { auth: false }
-            );
-            locationInfoEl.textContent = `${routeCode}: lat ${data.lat}, lng ${data.lng}, capturado em ${formatDate(
-              data.capturedAt
-            )}`;
-            placeMarker(data.lat, data.lng, `${routeCode} - ${formatDate(data.capturedAt)}`);
-          } catch (error) {
-            showStatus(error.message, "warn");
-          }
-        });
-
-      logoutBtn.addEventListener("click", async () => {
-        clearStatus();
-        try {
-          await apiRequest("/auth/logout", { method: "POST" });
-        } catch (_error) {
-        } finally {
-          setAccessToken(null);
-          setLoggedIn(false);
-          showStatus("Sessao encerrada.", "ok");
-        }
-      });
-
-      async function bootstrap() {
-        initMap();
-        if (state.accessToken) {
-          try {
-            await loadDashboard();
-            return;
-          } catch (_error) {
-            setAccessToken(null);
-          }
-        }
-
-        const refreshed = await refreshSession();
-        if (refreshed) {
-          try {
-            await loadDashboard();
-            return;
-          } catch (_error) {
-            setAccessToken(null);
-          }
-        }
-
-        setLoggedIn(false);
-      }
-
-      bootstrap();
-    </script>
+    <script src="/assets/app.js"></script>
   </body>
 </html>

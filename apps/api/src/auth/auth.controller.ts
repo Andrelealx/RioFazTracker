@@ -30,6 +30,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response
   ) {
     const session = await this.authService.register(payload);
+    this.attachAccessCookie(response, session.accessToken);
     this.attachRefreshCookie(response, session.refreshToken);
     return session;
   }
@@ -41,6 +42,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response
   ) {
     const session = await this.authService.login(payload);
+    this.attachAccessCookie(response, session.accessToken);
     this.attachRefreshCookie(response, session.refreshToken);
     return session;
   }
@@ -54,6 +56,7 @@ export class AuthController {
     const tokenFromCookie = response.req?.cookies?.[this.authService.getRefreshCookieName()];
     const refreshToken = payload.refreshToken || tokenFromCookie;
     const session = await this.authService.refresh(refreshToken);
+    this.attachAccessCookie(response, session.accessToken);
     this.attachRefreshCookie(response, session.refreshToken);
     return session;
   }
@@ -66,6 +69,9 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response
   ) {
     await this.authService.revokeAllSessions(user.id);
+    response.clearCookie(this.authService.getAccessCookieName(), {
+      path: "/"
+    });
     response.clearCookie(this.authService.getRefreshCookieName(), {
       path: "/api/auth"
     });
@@ -85,6 +91,16 @@ export class AuthController {
       secure: this.configService.get<string>("NODE_ENV") === "production",
       path: "/api/auth",
       maxAge: this.authService.getRefreshCookieMaxAgeMs()
+    });
+  }
+
+  private attachAccessCookie(response: Response, accessToken: string): void {
+    response.cookie(this.authService.getAccessCookieName(), accessToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: this.configService.get<string>("NODE_ENV") === "production",
+      path: "/",
+      maxAge: this.authService.getAccessCookieMaxAgeMs()
     });
   }
 }
