@@ -16,7 +16,8 @@
     "lint": "npm run lint --workspaces --if-present",
     "postinstall": "npm run prisma:generate",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-    "prisma:migrate": "prisma migrate deploy --schema prisma/schema.prisma",
+    "prisma:resolve-init": "prisma migrate resolve --rolled-back 202603111700_init --schema prisma/schema.prisma || node -e \"process.exit(0)\"",
+    "prisma:migrate": "npm run prisma:resolve-init && prisma migrate deploy --schema prisma/schema.prisma",
     "prisma:seed": "tsx prisma/seed.ts",
     "legacy:migrate": "tsx scripts/migrate-legacy-sql.ts"
   },
