@@ -233,6 +233,7 @@ async function ensureBootstrapAdmin(
   }
 
   try {
+    await ensureRoleEnumCompatibility(prismaService, logger);
     const passwordHash = await hash(password, 12);
     await prismaService.user.upsert({
       where: { email },
@@ -254,5 +255,30 @@ async function ensureBootstrapAdmin(
     logger.log(`Bootstrap admin ensured for ${email}`);
   } catch (error) {
     logger.error(`Failed to ensure bootstrap admin for ${email}`, error as Error);
+  }
+}
+
+async function ensureRoleEnumCompatibility(prismaService: PrismaService, logger: Logger): Promise<void> {
+  try {
+    await prismaService.$executeRawUnsafe(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UserRole') THEN
+          CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'OPERATOR', 'CITIZEN', 'TRACKER_DEVICE');
+        END IF;
+      END $$;
+    `);
+  } catch (error) {
+    logger.warn(`Could not ensure enum UserRole exists: ${(error as Error).message}`);
+  }
+
+  try {
+    await prismaService.$executeRawUnsafe(`
+      ALTER TABLE users
+      ALTER COLUMN role TYPE "UserRole"
+      USING role::text::"UserRole";
+    `);
+  } catch (error) {
+    logger.warn(`Could not align users.role type to UserRole: ${(error as Error).message}`);
   }
 }
