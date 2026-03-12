@@ -1,7 +1,9 @@
-﻿import "reflect-metadata";
+import "reflect-metadata";
+import fs from "node:fs";
+import path from "node:path";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { Request, Response } from "express";
+import { Request, Response, static as expressStatic } from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
@@ -49,12 +51,40 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   const httpAdapter = app.getHttpAdapter().getInstance();
-  httpAdapter.get("/", (_request: Request, response: Response) => {
+  const publicDirectory = resolvePublicDirectory();
+
+  if (publicDirectory) {
+    httpAdapter.use(expressStatic(publicDirectory));
+
+    httpAdapter.get("/", (_request: Request, response: Response) => {
+      response.sendFile(path.join(publicDirectory, "index.html"));
+    });
+
+    httpAdapter.get("/tracker", (_request: Request, response: Response) => {
+      response.sendFile(path.join(publicDirectory, "tracker.html"));
+    });
+  } else {
+    httpAdapter.get("/", (_request: Request, response: Response) => {
+      response.status(200).json({
+        name: "RioFazTracker API",
+        status: "ok",
+        docs: "/api/health",
+        timestamp: new Date().toISOString()
+      });
+    });
+  }
+
+  httpAdapter.get("/api", (_request: Request, response: Response) => {
     response.status(200).json({
       name: "RioFazTracker API",
       status: "ok",
-      docs: "/api/health",
-      timestamp: new Date().toISOString()
+      docs: {
+        health: "/api/health",
+        auth: ["/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/me"],
+        citizen: ["/api/citizen/profile", "/api/citizen/dashboard"],
+        routes: ["/api/routes/info"],
+        tracking: ["/api/tracking/location", "/api/tracking/history"]
+      }
     });
   });
 
@@ -64,3 +94,19 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+function resolvePublicDirectory(): string | null {
+  const candidates = [
+    path.resolve(process.cwd(), "apps/api/public"),
+    path.resolve(process.cwd(), "public"),
+    path.resolve(__dirname, "../public")
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}

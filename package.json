@@ -7,10 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "start": "npm --workspace @riofaz/api run start",
-    "dev": "concurrently \"npm:dev:api\" \"npm:dev:web\"",
+    "start": "npm run prisma:migrate && npm --workspace @riofaz/api run start",
+    "dev": "npm run dev:api",
     "dev:api": "npm --workspace @riofaz/api run start:dev",
-    "dev:web": "npm --workspace @riofaz/web run dev",
+    "dev:web": "echo \"Frontend servido pela API em apps/api/public\"",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",

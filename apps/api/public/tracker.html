@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RioFazTracker - Rastreador</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(140deg, #0f172a, #1d4f91 60%, #295f80);
+        color: #e9f2ff;
+      }
+
+      .container {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+      }
+
+      .card {
+        background: rgba(8, 25, 50, 0.72);
+        border: 1px solid rgba(180, 210, 255, 0.25);
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+
+      h1,
+      h2 {
+        margin-top: 0;
+      }
+
+      form {
+        display: grid;
+        gap: 10px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 8px;
+      }
+
+      label {
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      input,
+      button {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #4e6fa8;
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+
+      input {
+        background: rgba(255, 255, 255, 0.08);
+        color: #f2f7ff;
+      }
+
+      button {
+        border: none;
+        background: #00acc1;
+        color: #032034;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: #f8f9fa;
+        color: #24374d;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .actions button {
+        flex: 1;
+      }
+
+      .status {
+        border-radius: 10px;
+        background: rgba(0, 172, 193, 0.2);
+        padding: 10px;
+      }
+
+      pre {
+        margin: 0;
+        background: rgba(0, 0, 0, 0.36);
+        border-radius: 10px;
+        padding: 12px;
+        max-height: 260px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      a {
+        color: #b4f5ff;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Rastreador de frota</h1>
+      <p><a href="/">Voltar ao portal cidadão</a></p>
+
+      <section class="card">
+        <h2>Configuração do dispositivo</h2>
+        <form id="trackerForm">
+          <div class="row">
+            <div>
+              <label for="deviceCode">X-Device-Code</label>
+              <input id="deviceCode" required placeholder="device-coleta1" />
+            </div>
+            <div>
+              <label for="deviceKey">X-Device-Key</label>
+              <input id="deviceKey" required />
+            </div>
+            <div>
+              <label for="routeCode">Rota</label>
+              <input id="routeCode" required placeholder="coleta1" />
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label for="vehicleCode">Veículo</label>
+              <input id="vehicleCode" placeholder="caminhao-01" />
+            </div>
+            <div>
+              <label for="teamCode">Equipe</label>
+              <input id="teamCode" placeholder="time-a" />
+            </div>
+          </div>
+        </form>
+        <div class="actions">
+          <button id="startBtn" type="button">Iniciar rastreamento</button>
+          <button id="stopBtn" type="button" class="secondary">Parar</button>
+          <button id="sendNowBtn" type="button" class="secondary">Enviar agora</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Status</h2>
+        <p id="statusText" class="status">Aguardando ação.</p>
+      </section>
+
+      <section class="card">
+        <h2>Log de envio</h2>
+        <pre id="logOutput"></pre>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        watchId: null,
+        lastSentAt: 0,
+        lastLat: null,
+        lastLng: null
+      };
+
+      const statusText = document.getElementById("statusText");
+      const logOutput = document.getElementById("logOutput");
+
+      function getConfig() {
+        return {
+          deviceCode: document.getElementById("deviceCode").value.trim(),
+          deviceKey: document.getElementById("deviceKey").value.trim(),
+          routeCode: document.getElementById("routeCode").value.trim(),
+          vehicleCode: document.getElementById("vehicleCode").value.trim() || undefined,
+          teamCode: document.getElementById("teamCode").value.trim() || undefined
+        };
+      }
+
+      function setStatus(message) {
+        statusText.textContent = message;
+      }
+
+      function appendLog(message, data) {
+        const line = `[${new Date().toLocaleTimeString("pt-BR")}] ${message}${
+          data ? " - " + JSON.stringify(data) : ""
+        }`;
+        logOutput.textContent = `${line}\n${logOutput.textContent}`;
+      }
+
+      function distanceInMeters(lat1, lng1, lat2, lng2) {
+        const toRad = (value) => (value * Math.PI) / 180;
+        const earth = 6371000;
+        const dLat = toRad(lat2 - lat1);
+        const dLng = toRad(lng2 - lng1);
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+        return 2 * earth * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+
+      async function sendLocation(position) {
+        const config = getConfig();
+        if (!config.deviceCode || !config.deviceKey || !config.routeCode) {
+          setStatus("Preencha Device Code, Device Key e Rota.");
+          return;
+        }
+
+        const body = {
+          routeCode: config.routeCode,
+          vehicleCode: config.vehicleCode,
+          teamCode: config.teamCode,
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          speed: position.coords.speed != null ? Math.max(0, position.coords.speed) : undefined,
+          accuracy:
+            position.coords.accuracy != null ? Math.max(0, position.coords.accuracy) : undefined,
+          capturedAt: new Date(position.timestamp).toISOString()
+        };
+
+        const response = await fetch("/api/tracking/location", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Device-Code": config.deviceCode,
+            "X-Device-Key": config.deviceKey
+          },
+          body: JSON.stringify(body)
+        });
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(
+            payload && payload.message
+              ? Array.isArray(payload.message)
+                ? payload.message.join(", ")
+                : payload.message
+              : "Falha ao enviar localização"
+          );
+        }
+
+        state.lastSentAt = Date.now();
+        state.lastLat = body.lat;
+        state.lastLng = body.lng;
+        appendLog("Localização enviada", payload);
+        setStatus(`Último envio em ${new Date().toLocaleTimeString("pt-BR")}`);
+      }
+
+      function shouldSend(position) {
+        if (!state.lastSentAt) {
+          return true;
+        }
+
+        const elapsedMs = Date.now() - state.lastSentAt;
+        if (elapsedMs >= 15000) {
+          return true;
+        }
+
+        if (state.lastLat == null || state.lastLng == null) {
+          return true;
+        }
+
+        const distance = distanceInMeters(
+          state.lastLat,
+          state.lastLng,
+          position.coords.latitude,
+          position.coords.longitude
+        );
+        return distance >= 20;
+      }
+
+      function onPosition(position) {
+        appendLog("Posição recebida", {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        });
+
+        if (!shouldSend(position)) {
+          return;
+        }
+
+        sendLocation(position).catch((error) => {
+          appendLog("Erro ao enviar", { message: error.message });
+          setStatus(`Erro: ${error.message}`);
+        });
+      }
+
+      function onPositionError(error) {
+        appendLog("Erro de geolocalização", { code: error.code, message: error.message });
+        setStatus(`Geolocalização falhou: ${error.message}`);
+      }
+
+      document.getElementById("startBtn").addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          setStatus("Geolocalização não suportada neste navegador.");
+          return;
+        }
+
+        if (state.watchId !== null) {
+          setStatus("Rastreamento já está ativo.");
+          return;
+        }
+
+        state.watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, {
+          enableHighAccuracy: true,
+          maximumAge: 5000,
+          timeout: 15000
+        });
+        setStatus("Rastreamento iniciado.");
+        appendLog("watchPosition iniciado", { watchId: state.watchId });
+      });
+
+      document.getElementById("stopBtn").addEventListener("click", () => {
+        if (state.watchId !== null) {
+          navigator.geolocation.clearWatch(state.watchId);
+          appendLog("watchPosition encerrado", { watchId: state.watchId });
+          state.watchId = null;
+        }
+        setStatus("Rastreamento parado.");
+      });
+
+      document.getElementById("sendNowBtn").addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          setStatus("Geolocalização não suportada.");
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            sendLocation(position).catch((error) => {
+              appendLog("Erro no envio manual", { message: error.message });
+              setStatus(`Erro: ${error.message}`);
+            });
+          },
+          onPositionError,
+          {
+            enableHighAccuracy: true,
+            timeout: 15000
+          }
+        );
+      });
+    </script>
+  </body>
+</html>
