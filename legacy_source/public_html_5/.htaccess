@@ -1,0 +1,7 @@
+# Force o Apache a servir index.html como página padrão
+DirectoryIndex index.html
+
+# Se quiser redirecionar todas as requisições para index.html (SPA):
+# RewriteEngine On
+# RewriteCond %{REQUEST_FILENAME} !-f
+# RewriteRule ^ index.html [L]

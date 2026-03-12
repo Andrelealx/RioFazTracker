@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  CITIZEN
+  TRACKER_DEVICE
+}
+
+model User {
+  id             String           @id @default(uuid())
+  legacyId       Int?             @unique @map("legacy_id")
+  name           String
+  email          String?          @unique
+  phoneE164      String?          @unique @map("phone_e164")
+  passwordHash   String?          @map("password_hash")
+  role           UserRole         @default(CITIZEN)
+  isActive       Boolean          @default(true) @map("is_active")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  refreshTokens  RefreshToken[]
+  addresses      Address[]
+  preferences    UserPreference?
+  notificationLogs NotificationLog[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  tokenHash  String   @map("token_hash")
+  expiresAt  DateTime @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Neighborhood {
+  id         String   @id @default(uuid())
+  legacyId   Int?     @unique @map("legacy_id")
+  name       String
+  city       String
+  uf         String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  routes     Route[]
+
+  @@unique([name, city, uf])
+  @@map("neighborhoods")
+}
+
+model Route {
+  id               String            @id @default(uuid())
+  legacyId         Int?              @unique @map("legacy_id")
+  code             String            @unique
+  name             String
+  neighborhoodId   String?           @map("neighborhood_id")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  neighborhood     Neighborhood?     @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
+  schedules        RouteSchedule[]
+  currentLocation  CurrentLocation?
+  locationHistory  LocationHistory[]
+  devices          TrackerDevice[]
+  addressMaps      AddressRouteMap[]
+  notificationLogs NotificationLog[]
+
+  @@map("routes")
+}
+
+model RouteSchedule {
+  id         String   @id @default(uuid())
+  legacyId   Int?     @unique @map("legacy_id")
+  routeId    String   @map("route_id")
+  weekday    Int
+  timeStart  String   @map("time_start")
+  timeEnd    String   @map("time_end")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  route      Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, weekday])
+  @@index([weekday])
+  @@map("route_schedules")
+}
+
+model TrackerDevice {
+  id            String    @id @default(uuid())
+  code          String    @unique
+  name          String
+  apiKeyHash    String    @map("api_key_hash")
+  routeId       String?   @map("route_id")
+  vehicleCode   String?   @map("vehicle_code")
+  teamCode      String?   @map("team_code")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  route         Route?    @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  locations     LocationHistory[]
+  currentPoints CurrentLocation[]
+
+  @@map("tracker_devices")
+}
+
+model CurrentLocation {
+  id          String    @id @default(uuid())
+  routeId     String    @unique @map("route_id")
+  deviceId    String?   @map("device_id")
+  vehicleCode String?   @map("vehicle_code")
+  teamCode    String?   @map("team_code")
+  lat         Decimal   @db.Decimal(10, 7)
+  lng         Decimal   @db.Decimal(10, 7)
+  speed       Decimal?  @db.Decimal(8, 2)
+  accuracy    Decimal?  @db.Decimal(8, 2)
+  capturedAt  DateTime  @map("captured_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  route       Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  device      TrackerDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([updatedAt])
+  @@map("current_locations")
+}
+
+model LocationHistory {
+  id          String    @id @default(uuid())
+  legacyId    Int?      @unique @map("legacy_id")
+  routeId     String    @map("route_id")
+  deviceId    String?   @map("device_id")
+  vehicleCode String?   @map("vehicle_code")
+  teamCode    String?   @map("team_code")
+  lat         Decimal   @db.Decimal(10, 7)
+  lng         Decimal   @db.Decimal(10, 7)
+  speed       Decimal?  @db.Decimal(8, 2)
+  accuracy    Decimal?  @db.Decimal(8, 2)
+  capturedAt  DateTime  @map("captured_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  route       Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  device      TrackerDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([routeId, capturedAt])
+  @@map("location_history")
+}
+
+model Address {
+  id           String    @id @default(uuid())
+  legacyId     Int?      @unique @map("legacy_id")
+  userId       String    @map("user_id")
+  cep          String
+  logradouro   String
+  numero       String?
+  complemento  String?
+  bairro       String
+  cidade       String
+  uf           String
+  lat          Decimal?  @db.Decimal(10, 7)
+  lng          Decimal?  @db.Decimal(10, 7)
+  geocodedAt   DateTime? @map("geocoded_at")
+  isPrimary    Boolean   @default(true) @map("is_primary")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routeMaps    AddressRouteMap[]
+
+  @@index([userId])
+  @@index([bairro])
+  @@index([cidade, uf])
+  @@map("addresses")
+}
+
+model AddressRouteMap {
+  id         String   @id @default(uuid())
+  legacyId   Int?     @unique @map("legacy_id")
+  addressId  String   @map("address_id")
+  routeId    String   @map("route_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  address    Address  @relation(fields: [addressId], references: [id], onDelete: Cascade)
+  route      Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@unique([addressId, routeId])
+  @@map("address_route_map")
+}
+
+model UserPreference {
+  id                    String   @id @default(uuid())
+  userId                String   @unique @map("user_id")
+  notifyEnabled         Boolean  @default(false) @map("notify_enabled")
+  notifyProximityMeters Int      @default(500) @map("notify_proximity_meters")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model NotificationLog {
+  id         String   @id @default(uuid())
+  legacyId   Int?     @unique @map("legacy_id")
+  userId     String   @map("user_id")
+  routeId    String   @map("route_id")
+  reason     String
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  route      Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notification_logs")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  resource   String?
+  resourceId String?  @map("resource_id")
+  metadata   Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@map("audit_logs")
+}

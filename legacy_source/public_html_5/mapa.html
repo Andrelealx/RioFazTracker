@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RioFaz • Mapa Público</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous"/>
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    .status { position:absolute; z-index:1000; top:12px; left:12px; padding:8px 12px; border-radius:10px; font:14px/1.3 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:#fff; }
+    .status.online{ background:#10b981; } .status.offline{ background:#ef4444; }
+    .follow { position:absolute; z-index:1000; top:12px; right:12px; padding:8px 12px; border-radius:10px; font:14px/1.3 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:#fff; background:#2563eb; cursor:pointer; }
+    .follow.stop { background:#dc2626; }
+    .hud {
+      position:absolute; z-index:1000; bottom:12px; left:12px; background:rgba(0,0,0,.72); color:#fff;
+      padding:8px 12px; border-radius:10px; font:13px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; min-width:230px;
+    }
+    .hud .row{ margin:2px 0; } .hud strong{ display:inline-block; min-width:72px; }
+  </style>
+  <meta http-equiv="Cache-Control" content="no-store" />
+</head>
+<body>
+  <div id="map"></div>
+  <div id="truckStatus" class="status offline">Caminhão Offline</div>
+  <button id="btnFollow" class="follow"><span>Seguir Caminhão</span></button>
+  <div class="hud">
+    <div class="row"><strong>Rota:</strong> <span id="hud-route">-</span></div>
+    <div class="row"><strong>Lat:</strong> <span id="hud-lat">-</span> • <strong>Lng:</strong> <span id="hud-lng">-</span></div>
+    <div class="row"><strong>Atualizado:</strong> <span id="hud-time">-</span></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+  <script>
+    // === Config ===
+    const params   = new URLSearchParams(location.search);
+    const routeId  = params.get('route_id') || 'coleta1';
+    const GET_URL  = './api/get_location_public.php';
+    const CITY     = [-22.5348, -42.9835]; // Guapimirim
+    const CITY_Z   = 13;                   // zoom “cidade”
+    const POLL_MS  = 1000;                 // 1s (igual ao index)
+    const STALE_MS = 15_000;               // 15s: se passar disso, some marcador
+
+    // === UI refs ===
+    const $status = document.getElementById('truckStatus');
+    const $btn    = document.getElementById('btnFollow');
+    const $r      = document.getElementById('hud-route');
+    const $lat    = document.getElementById('hud-lat');
+    const $lng    = document.getElementById('hud-lng');
+    const $time   = document.getElementById('hud-time');
+
+    $r.textContent = routeId;
+
+    // === Mapa ===
+    const map = L.map('map');
+    map.setView(CITY, CITY_Z);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap' }).addTo(map);
+
+    let marker = null;
+    let following = false;
+    $btn.addEventListener('click', () => {
+      following = !following;
+      $btn.classList.toggle('stop', following);
+      $btn.querySelector('span').textContent = following ? 'Parar de Seguir' : 'Seguir Caminhão';
+      if (following && marker) map.panTo(marker.getLatLng(), { animate:true });
+    });
+
+    function setStatusOnline(ok, ageMs) {
+      if (ok) {
+        $status.classList.remove('offline'); $status.classList.add('online');
+        $status.textContent = 'Caminhão Online';
+      } else {
+        $status.classList.remove('online'); $status.classList.add('offline');
+        const mins = Math.max(1, Math.round((ageMs||0)/60000));
+        $status.textContent = `Caminhão Offline (há ${mins} min)`;
+      }
+    }
+
+    const fmtTime = ms => ms ? new Date(ms).toLocaleString() : '-';
+
+    async function fetchTruck() {
+      try {
+        const res = await fetch(`${GET_URL}?route_id=${encodeURIComponent(routeId)}&t=${Date.now()}`, { cache:'no-store' });
+        if (!res.ok) {
+          // 404/500: considera offline e some marcador
+          setStatusOnline(false);
+          if (marker) { map.removeLayer(marker); marker = null; }
+          return;
+        }
+        const txt = await res.text();
+        const data = JSON.parse(txt);
+
+        if (typeof data.lat !== 'number' || typeof data.lng !== 'number') {
+          setStatusOnline(false);
+          if (marker) { map.removeLayer(marker); marker = null; }
+          return;
+        }
+
+        const lat = data.lat, lng = data.lng;
+        // normaliza tempo -> ms
+        let when = (typeof data.update_ts === 'number') ? data.update_ts
+                  : (typeof data.ts === 'number' ? data.ts * 1000 : Date.now());
+        const age = Date.now() - when;
+
+        if (age > STALE_MS) {
+          setStatusOnline(false, age);
+          if (marker) { map.removeLayer(marker); marker = null; }
+          $lat.textContent = lat.toFixed(6); $lng.textContent = lng.toFixed(6); $time.textContent = fmtTime(when);
+          return;
+        }
+
+        setStatusOnline(true);
+        $lat.textContent = lat.toFixed(6);
+        $lng.textContent = lng.toFixed(6);
+        $time.textContent = fmtTime(when);
+
+        if (!marker) {
+          marker = L.marker([lat, lng], {
+            icon: L.icon({
+              iconUrl: 'https://img.icons8.com/?size=100&id=13800&format=png',
+              iconSize: [32,32], iconAnchor: [16,16]
+            })
+          }).addTo(map).bindPopup('<b>Caminhão de coleta</b>');
+          // primeira posição recebida: aproxima o zoom sem “mundo inteiro”
+          map.setView([lat, lng], Math.max(map.getZoom(), 15));
+        } else {
+          marker.setLatLng([lat, lng]);
+        }
+
+        if (following) map.panTo([lat, lng], { animate:true });
+
+      } catch (e) {
+        // Falha de rede/parse: não derruba a página
+        setStatusOnline(false);
+      }
+    }
+
+    // start polling
+    fetchTruck();
+    setInterval(fetchTruck, POLL_MS);
+  </script>
+</body>
+</html>

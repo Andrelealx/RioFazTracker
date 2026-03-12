@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <title>RioFaz – Rastreamento em Tempo Real</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Tailwind -->
+  <script>
+    tailwind = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['ui-sans-serif','system-ui','-apple-system','Segoe UI','Roboto','Helvetica Neue','Arial','Noto Sans','Liberation Sans','sans-serif']
+          },
+          boxShadow: {
+            soft: '0 12px 30px rgba(2, 6, 23, .10)',
+            glass: '0 18px 50px rgba(2, 6, 23, .18)'
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+  <style>
+    :root{
+      --header-h: 112px; /* JS recalcula */
+      --glass-bg: rgba(255,255,255,.78);
+      --glass-bd: rgba(255,255,255,.45);
+      --ink: #0b1220;
+    }
+    html, body { height: 100%; }
+    body{
+      color: var(--ink);
+      background:
+        radial-gradient(900px 500px at 15% 10%, rgba(16,185,129,.18), transparent 55%),
+        radial-gradient(700px 420px at 90% 15%, rgba(59,130,246,.16), transparent 55%),
+        radial-gradient(900px 500px at 50% 105%, rgba(148,163,184,.20), transparent 55%),
+        linear-gradient(180deg, #f8fafc 0%, #eef2f7 55%, #eef2ff 100%);
+      overflow: hidden; /* o mapa já é fixed */
+    }
+
+    /* mapa ocupa 100vh menos a altura real do header fixo */
+    #map{
+      position: fixed;
+      top: var(--header-h);
+      left: 0; right: 0;
+      height: calc(100vh - var(--header-h));
+      z-index: 1;
+    }
+
+    /* Topbar elegante */
+    .topbar{
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: linear-gradient(180deg, rgba(2,6,23,.78), rgba(2,6,23,.62));
+      border-bottom: 1px solid rgba(255,255,255,.10);
+    }
+    .topbar .chip{
+      background: rgba(255,255,255,.10);
+      border: 1px solid rgba(255,255,255,.14);
+    }
+    .topbar .chip:hover{ background: rgba(255,255,255,.14); }
+
+    /* Glass cards (painéis) */
+    .glass{
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-bd);
+      box-shadow: 0 18px 50px rgba(2, 6, 23, .14);
+    }
+    .panel{
+      position: fixed;
+      z-index: 1000;
+      top: calc(var(--header-h) + 14px);
+      left: 14px;
+      border-radius: 18px;
+      padding: .9rem;
+      width: min(340px, calc(100vw - 28px));
+    }
+
+    .actions{
+      position: fixed;
+      z-index: 1000;
+      right: 14px;
+      top: calc(var(--header-h) + 14px);
+      display: grid;
+      gap: .55rem;
+    }
+
+    .btn{ transition: transform .18s ease, filter .18s ease, box-shadow .18s ease; }
+    .btn:hover{ transform: translateY(-1px); filter: brightness(1.02); }
+    .btn:active{ transform: translateY(0px) scale(.99); }
+
+    /* Toggle */
+    .switch{ position: relative; display: inline-block; width: 46px; height: 24px; }
+    .switch input{ display:none; }
+    .slider{
+      position:absolute; cursor:pointer; inset:0;
+      background:#cbd5e1; transition:.2s; border-radius:9999px;
+    }
+    .slider:before{
+      position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px;
+      background:white; transition:.2s; border-radius:9999px;
+      box-shadow: 0 4px 10px rgba(2,6,23,.18);
+    }
+    input:checked + .slider{ background:#10b981; }
+    input:checked + .slider:before{ transform:translateX(22px); }
+
+    /* Banner de erro */
+    .error-banner{
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1200;
+      display: none;
+    }
+
+    /* Portal */
+    .portal-overlay{
+      position:fixed; inset:0;
+      background: radial-gradient(900px 500px at 10% 0%, rgba(16,185,129,.25), transparent 55%),
+                  radial-gradient(900px 500px at 100% 0%, rgba(59,130,246,.22), transparent 55%),
+                  rgba(2,6,23,.55);
+      display:none; z-index:1100;
+      align-items:center; justify-content:center;
+      padding: 1rem;
+    }
+    .portal-card{
+      max-width: 54rem;
+      width: 100%;
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 25px 80px rgba(2,6,23,.40);
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      max-height: calc(100vh - 2rem);
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+    }
+    .portal-head{
+      background: linear-gradient(180deg, rgba(2,6,23,.88), rgba(2,6,23,.70));
+      color: #fff;
+      padding: 1.05rem 1.15rem;
+      border-bottom: 1px solid rgba(255,255,255,.10);
+    }
+    .portal-body{
+      padding: 1.15rem;
+      overflow: auto;
+      background:
+        radial-gradient(800px 420px at 0% 0%, rgba(16,185,129,.12), transparent 55%),
+        radial-gradient(800px 420px at 100% 0%, rgba(59,130,246,.10), transparent 55%),
+        rgba(255,255,255,.90);
+    }
+    .map-wrap{ position:relative; margin-top:.5rem; }
+    .map-container-inline{
+      height: 360px;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid rgba(148,163,184,.45);
+      box-shadow: 0 14px 40px rgba(2,6,23,.10);
+    }
+    .grid-addr{ display:grid; grid-template-columns: 1.5fr .7fr 1fr; gap:.75rem; }
+    @media (max-width:640px){ .grid-addr{ grid-template-columns: 1fr; } }
+    .hint{ font-size:.75rem; color:#64748b; }
+
+    /* ====== UI Toggles (não mexe na lógica) ====== */
+    .panel, .actions, #appHeader { transition: transform .25s ease, opacity .25s ease; }
+
+    body.header-collapsed #appHeader{ transform: translateY(calc(-1 * var(--header-h))); }
+    body.header-collapsed #map{ top: 0; height: 100vh; }
+
+    body.map-focus .panel{ transform: translateX(calc(-100% - 24px)); opacity:0; pointer-events:none; }
+    body.map-focus .actions{ transform: translateX(calc(100% + 24px)); opacity:0; pointer-events:none; }
+
+    /* Leaflet polish */
+    .leaflet-control-zoom a{
+      border-radius: 10px !important;
+      overflow: hidden;
+      border: 1px solid rgba(148,163,184,.55) !important;
+      box-shadow: 0 10px 25px rgba(2,6,23,.12) !important;
+    }
+    .leaflet-control-scale{
+      background: rgba(255,255,255,.75);
+      border: 1px solid rgba(148,163,184,.45);
+      border-radius: 12px;
+      padding: 4px 8px;
+      box-shadow: 0 10px 25px rgba(2,6,23,.10);
+    }
+  </style>
+</head>
+
+<body class="h-full font-sans">
+  <!-- Header -->
+  <header id="appHeader" class="topbar fixed top-0 left-0 right-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 pt-4 pb-3">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-2xl bg-white/10 border border-white/15 grid place-items-center shadow-soft">
+            <i class="fa-solid fa-route text-white/90"></i>
+          </div>
+          <div>
+            <h1 class="text-base sm:text-lg font-semibold tracking-wide text-white">
+              RioFaz <span class="text-white/60 font-medium">• Rastreamento em Tempo Real</span>
+            </h1>
+            <p class="text-sm text-white/70">
+              Acompanhamento ao vivo da rota via API.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 items-center">
+          <button id="openPortalBtn"
+            class="btn chip text-xs text-white px-3 py-2 rounded-xl">
+            <i class="fa fa-user mr-2"></i>Portal do Cidadão
+          </button>
+
+          <div class="chip px-3 py-2 rounded-xl text-xs text-white/90 flex items-center gap-2">
+            <i class="fa-solid fa-location-dot text-white/70"></i>
+            <span class="text-white/70">Rota:</span>
+            <span id="routeLabel" class="font-semibold">coleta1</span>
+          </div>
+
+          <div id="statusPill" class="chip px-3 py-2 rounded-xl text-xs text-white/90">
+            Carregando…
+          </div>
+
+          <button id="recenterBtn"
+            class="btn chip text-xs text-white px-3 py-2 rounded-xl">
+            <i class="fa-solid fa-crosshairs mr-2"></i>Recentrar
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div class="chip rounded-2xl px-4 py-3">
+          <div class="text-[11px] tracking-wide uppercase text-white/60">Última atualização</div>
+          <div id="lastUpdate" class="text-sm font-medium text-white/90 mt-1">—</div>
+        </div>
+
+        <div class="chip rounded-2xl px-4 py-3">
+          <div class="text-[11px] tracking-wide uppercase text-white/60">Latitude / Longitude</div>
+          <div id="latlng" class="text-sm font-medium text-white/90 mt-1">—</div>
+        </div>
+
+        <div class="chip rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+          <div>
+            <div class="text-[11px] tracking-wide uppercase text-white/60">Auto-atualizar</div>
+            <div class="text-sm font-medium text-white/90 mt-1">
+              a cada <span id="intervalLabel">5</span>s
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="intervalRange" type="range" min="3" max="30" step="1" value="5" class="w-28 accent-emerald-400">
+            <button id="refreshBtn"
+              class="btn chip text-xs text-white px-3 py-2 rounded-xl">
+              <i class="fa-solid fa-rotate mr-2"></i>Atualizar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mapa -->
+  <div id="map" role="region" aria-label="Mapa de localização do caminhão"></div>
+
+  <!-- Painel flutuante -->
+  <div class="panel glass">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <div class="text-[11px] tracking-wide uppercase text-slate-500">Status do caminhão</div>
+        <div class="flex items-center gap-2 mt-1">
+          <div class="h-2.5 w-2.5 rounded-full bg-amber-400" id="statusDot"></div>
+          <div class="text-sm font-semibold text-slate-900">Telemetria</div>
+        </div>
+      </div>
+      <span id="freshBadge" class="text-[11px] px-2 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+        Aguardando…
+      </span>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div class="rounded-2xl bg-white/70 border border-slate-200/60 p-3">
+        <div class="text-slate-500 flex items-center gap-1">
+          <i class="fa-solid fa-up-down-left-right text-slate-400"></i> Lat
+        </div>
+        <div id="infoLat" class="font-mono text-sm text-slate-900 mt-1">—</div>
+      </div>
+
+      <div class="rounded-2xl bg-white/70 border border-slate-200/60 p-3">
+        <div class="text-slate-500 flex items-center gap-1">
+          <i class="fa-solid fa-up-down-left-right text-slate-400"></i> Lng
+        </div>
+        <div id="infoLng" class="font-mono text-sm text-slate-900 mt-1">—</div>
+      </div>
+
+      <div class="rounded-2xl bg-white/70 border border-slate-200/60 p-3 col-span-2">
+        <div class="text-slate-500 flex items-center gap-1">
+          <i class="fa-regular fa-clock text-slate-400"></i> Atualizado em
+        </div>
+        <div id="infoTs" class="font-mono text-sm text-slate-900 mt-1">—</div>
+      </div>
+
+      <div class="rounded-2xl bg-white/70 border border-slate-200/60 p-3 col-span-2">
+        <div class="text-slate-500 flex items-center gap-1">
+          <i class="fa-solid fa-hourglass-half text-slate-400"></i> Idade do ponto
+        </div>
+        <div id="infoAge" class="font-mono text-sm text-slate-900 mt-1">—</div>
+      </div>
+    </div>
+
+    <div class="mt-3 grid grid-cols-2 gap-2">
+      <button id="followBtn"
+        class="btn col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2.5 rounded-2xl shadow-soft">
+        <i class="fa-solid fa-location-crosshairs mr-2"></i>Seguir caminhão
+      </button>
+
+      <button id="fitBtn"
+        class="btn bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 text-sm px-3 py-2.5 rounded-2xl">
+        <i class="fa-solid fa-expand mr-2 text-slate-500"></i>Enquadrar
+      </button>
+
+      <button id="myPosBtn"
+        class="btn bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 text-sm px-3 py-2.5 rounded-2xl">
+        <i class="fa-solid fa-person-walking mr-2 text-slate-500"></i>Minha posição
+      </button>
+    </div>
+
+    <div class="mt-3 flex items-center justify-between text-xs">
+      <label class="flex items-center gap-2 text-slate-700">
+        <span class="font-medium">Satélite</span>
+        <span class="switch">
+          <input id="tileToggle" type="checkbox"><span class="slider"></span>
+        </span>
+      </label>
+      <button id="copyLinkBtn" class="btn text-xs bg-white hover:bg-slate-50 border border-slate-200 px-3 py-2 rounded-2xl">
+        <i class="fa fa-link mr-2 text-slate-500"></i>Copiar link
+      </button>
+    </div>
+  </div>
+
+  <!-- Ações do lado direito (mantive, mas mais elegante) -->
+  <div class="actions">
+    <button id="copyLinkBtn_dup" class="hidden"></button>
+    <button id="recenterBtn_dup" class="hidden"></button>
+
+    <div class="glass rounded-2xl p-2">
+      <button id="copyLinkBtnSide"
+        class="btn w-full bg-white hover:bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm text-slate-800">
+        <i class="fa fa-link mr-2 text-slate-500"></i>Link da rota
+      </button>
+    </div>
+  </div>
+
+  <!-- Banner de erro -->
+  <div id="err" class="error-banner max-w-md w-[92vw] rounded-2xl shadow-glass px-4 py-3 text-sm text-white"
+       style="background: linear-gradient(90deg, rgba(220,38,38,.95), rgba(234,88,12,.92)); border:1px solid rgba(255,255,255,.18);">
+    <div class="flex items-start gap-3">
+      <div class="mt-0.5">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <div>
+        <strong class="font-semibold">Falha na atualização</strong>
+        <div id="errMsg" class="opacity-90 mt-0.5">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= Portal do Cidadão (Form + Dashboard) ======= -->
+  <div id="portal" class="portal-overlay">
+    <div class="portal-card">
+      <div class="portal-head">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="h-11 w-11 rounded-2xl bg-white/10 border border-white/15 grid place-items-center">
+              <i class="fa-solid fa-id-card text-white/90"></i>
+            </div>
+            <div>
+              <div class="text-lg font-semibold">Portal do Cidadão</div>
+              <div class="text-sm text-white/70">Cadastro, informações e acompanhamento da coleta</div>
+            </div>
+          </div>
+          <button id="closePortalBtn" class="btn bg-white/10 hover:bg-white/15 border border-white/15 px-3 py-2 rounded-xl">
+            <i class="fa fa-times text-white/90"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="px-4 py-3 bg-white border-b border-slate-200/60">
+        <div class="flex gap-2">
+          <button id="tabCadastro" class="btn px-4 py-2 rounded-xl bg-slate-900 text-white text-sm">
+            <i class="fa-regular fa-pen-to-square mr-2"></i>Cadastro
+          </button>
+          <button id="tabDashboard" class="btn px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-sm text-slate-800">
+            <i class="fa-solid fa-chart-simple mr-2 text-slate-500"></i>Dashboard
+          </button>
+        </div>
+      </div>
+
+      <div class="portal-body">
+        <!-- Formulário -->
+        <form id="registerForm" class="space-y-5">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="block text-sm font-medium text-slate-700">Nome completo</label>
+              <input id="name" type="text" required
+                class="mt-1 w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-300"
+                placeholder="Ex.: Maria Souza"/>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700">Telefone (WhatsApp)</label>
+              <input id="phone" type="tel" inputmode="numeric" required
+                class="mt-1 w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-300"
+                placeholder="(21) 9XXXX-XXXX"/>
+              <p class="hint mt-1">Digite livremente — formatamos pra você.</p>
+            </div>
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label class="block text-sm font-medium text-slate-700">CEP</label>
+              <div class="flex gap-2">
+                <input id="cep" type="text" inputmode="numeric" required
+                  class="mt-1 w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-300"
+                  placeholder="XXXXX-XXX"/>
+                <button type="button" id="btnFetchCep"
+                  class="btn mt-1 shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-2xl font-semibold shadow-soft">
+                  <i class="fas fa-search"></i>
+                </button>
+              </div>
+              <p class="hint mt-1">Pode colar com ou sem traço.</p>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-slate-700">Logradouro</label>
+              <input id="logradouro" type="text" required
+                class="mt-1 w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-300"
+                placeholder="Rua, Avenida..."/>
+            </div>
+          </div>
+
+          <div class="grid-addr">
+            <div>
+              <label class="block text-sm font-medium text-slate-700">Número</label>
+              <input id="numero" type="text"
+                class="mt-1 w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-300"
+                placeholder="Ex.: 123, 123A, S/N"/>
+              <p class="hint mt-1">Aceita letras e S/N.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700">Compl.</label>
+              <input id="complemento" type="text"
+                class="mt-1 w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-300"
+                placeholder="Apto, bloco..."/>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700">Bairro</label>
+              <input id="bairro" type="text" required
+                class="mt-1 w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-300"
+                placeholder="Bairro"/>
+            </div>
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-3">
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-slate-700">Cidade</label>
+              <input id="cidade" type="text" required value="Guapimirim"
+                class="mt-1 w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-300"/>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700">UF</label>
+              <input id="uf" type="text" maxlength="2" required value="RJ"
+                class="mt-1 w-full px-4 py-3 border border-slate-200 rounded-2xl bg-white focus:outline-none focus:ring-4 focus:ring-emerald-200 focus:border-emerald-300 uppercase"/>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button type="submit"
+              class="btn w-full bg-slate-900 hover:bg-black text-white py-3 rounded-2xl font-semibold shadow-soft">
+              <i class="fa-solid fa-floppy-disk mr-2"></i>Salvar meu cadastro
+            </button>
+          </div>
+        </form>
+
+        <!-- Dashboard -->
+        <div id="dashboard" class="hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h3 class="text-xl font-bold text-slate-900">
+              Bem-vindo, <span id="userName"></span>
+            </h3>
+            <button id="editProfile"
+              class="btn text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 px-4 py-2 rounded-2xl font-semibold flex items-center">
+              <i class="fas fa-edit mr-2 text-slate-500"></i>Editar Perfil
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="p-6 rounded-2xl border border-slate-200 bg-white shadow-soft">
+              <p class="text-slate-500 text-xs tracking-wide uppercase">Dia da coleta no seu bairro</p>
+              <p class="text-lg font-semibold text-slate-900 mt-2" id="routeSchedule">—</p>
+            </div>
+            <div class="p-6 rounded-2xl border border-slate-200 bg-white shadow-soft">
+              <p class="text-slate-500 text-xs tracking-wide uppercase">Janela de horário</p>
+              <p class="text-lg font-semibold text-slate-900 mt-2" id="routeTime">—</p>
+            </div>
+          </div>
+
+          <div class="map-wrap">
+            <div id="mapInline" class="map-container-inline" role="region" aria-label="Mapa de localização (visualização compacta)"></div>
+          </div>
+
+          <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <p class="text-slate-700">
+              Próxima coleta: <strong id="nextPickup" class="text-slate-900">—</strong>
+            </p>
+            <button id="notifyBtn"
+              class="btn bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-semibold shadow-soft">
+              <i class="fas fa-bell mr-2"></i>Ativar Notificações
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------- Ajuste dinâmico do header ----------
+    const header = document.getElementById('appHeader');
+    function fixHeaderHeight() {
+      const h = header.offsetHeight;
+      document.documentElement.style.setProperty('--header-h', h + 'px');
+    }
+    new ResizeObserver(fixHeaderHeight).observe(header);
+    addEventListener('orientationchange', fixHeaderHeight);
+    addEventListener('load', fixHeaderHeight);
+    addEventListener('resize', fixHeaderHeight);
+
+    // ---------- Config ----------
+    const API_BASE = 'api';
+    const urlParams = new URLSearchParams(location.search);
+    const routeId = urlParams.get('route') || 'coleta1';
+    const pollSecondsDefault = 5;
+    const STALE_MS = 15 * 1000;
+
+    // ---------- UI refs ----------
+    const routeLabelEl = document.getElementById('routeLabel');
+    const statusPill    = document.getElementById('statusPill');
+    const lastUpdateEl  = document.getElementById('lastUpdate');
+    const latlngEl      = document.getElementById('latlng');
+    const refreshBtn    = document.getElementById('refreshBtn');
+    const recenterBtn   = document.getElementById('recenterBtn');
+    const intervalRange = document.getElementById('intervalRange');
+    const intervalLabel = document.getElementById('intervalLabel');
+
+    // Painel
+    const infoLat = document.getElementById('infoLat');
+    const infoLng = document.getElementById('infoLng');
+    const infoTs  = document.getElementById('infoTs');
+    const infoAge = document.getElementById('infoAge');
+    const freshBadge = document.getElementById('freshBadge');
+
+    // Ações
+    const followBtn = document.getElementById('followBtn');
+    const fitBtn    = document.getElementById('fitBtn');
+    const tileToggle= document.getElementById('tileToggle');
+    const myPosBtn  = document.getElementById('myPosBtn');
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
+
+    // (botão lateral novo)
+    const copyLinkBtnSide = document.getElementById('copyLinkBtnSide');
+
+    // Portal (modal) refs
+    const portal = document.getElementById('portal');
+    const openPortalBtn = document.getElementById('openPortalBtn');
+    const closePortalBtn = document.getElementById('closePortalBtn');
+    const tabCadastro = document.getElementById('tabCadastro');
+    const tabDashboard = document.getElementById('tabDashboard');
+    const registerForm = document.getElementById('registerForm');
+    const dashboard = document.getElementById('dashboard');
+    const userNameEl = document.getElementById('userName');
+
+    // Form inputs
+    const nameEl = document.getElementById('name');
+    const phoneEl = document.getElementById('phone');
+    const cepEl = document.getElementById('cep');
+    const btnFetchCep = document.getElementById('btnFetchCep');
+    const logradouroEl = document.getElementById('logradouro');
+    const numeroEl = document.getElementById('numero');
+    const complementoEl = document.getElementById('complemento');
+    const bairroEl = document.getElementById('bairro');
+    const cidadeEl = document.getElementById('cidade');
+    const ufEl = document.getElementById('uf');
+
+    // Dashboard placeholders
+    const routeScheduleEl = document.getElementById('routeSchedule');
+    const routeTimeEl = document.getElementById('routeTime');
+    const nextPickupEl = document.getElementById('nextPickup');
+
+    // Banner erro
+    const errBox  = document.getElementById('err');
+    const errMsg  = document.getElementById('errMsg');
+
+    routeLabelEl.textContent = routeId;
+
+    // ---------- Mapa principal ----------
+    const defaultCenter = [-22.53, -42.98];
+    const map = L.map('map', { zoomControl: true }).setView(defaultCenter, 13);
+
+    const osm  = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+    tileToggle?.addEventListener('change', () => {
+      if (tileToggle.checked) { map.removeLayer(osm); esri.addTo(map); }
+      else { map.removeLayer(esri); osm.addTo(map); }
+    });
+    L.control.scale({ metric: true, imperial: false }).addTo(map);
+
+    // Mapa inline
+    const mapInline = L.map('mapInline', { zoomControl: true, attributionControl:false }).setView(defaultCenter, 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInline);
+
+    // Ícone caminhão
+    const truckSvgUrl =
+      'data:image/svg+xml;utf8,' +
+      encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24">
+        <g transform="translate(0,1)">
+          <rect x="2" y="7" width="11" height="7" rx="1.2" fill="#0f766e"/>
+          <path d="M16 8h2.8c.3 0 .6.14.78.38l2 2.7c.14.2.22.44.22.68V14h-5V8z" fill="#059669"/>
+          <circle cx="7.5" cy="16.5" r="2.2" fill="#10b981"/><circle cx="17.5" cy="16.5" r="2.2" fill="#10b981"/>
+          <rect x="3" y="6" width="9" height="1.2" rx=".6" fill="#34d399"/>
+        </g>
+      </svg>`);
+    const TruckIcon = L.icon({
+      iconUrl: truckSvgUrl,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+      popupAnchor: [0, -16]
+    });
+
+    let marker = null;
+    let markerInline = null;
+    let myPosMarker = null;
+    let keepRecenter = true;
+    let isFollowing = false;
+    let staleTimer = null;
+    let lastSeenTs = null;
+
+    recenterBtn.addEventListener('click', () => {
+      keepRecenter = true;
+      if (marker) map.setView(marker.getLatLng(), 16, { animate: true });
+    });
+
+    followBtn?.addEventListener('click', () => {
+      isFollowing = !isFollowing;
+      followBtn.innerHTML = isFollowing
+        ? '<i class="fa-solid fa-ban mr-2"></i>Parar de seguir'
+        : '<i class="fa-solid fa-location-crosshairs mr-2"></i>Seguir caminhão';
+      followBtn.classList.toggle('bg-emerald-700', isFollowing);
+      if (isFollowing && marker) map.panTo(marker.getLatLng(), { animate: true });
+    });
+
+    fitBtn?.addEventListener('click', () => {
+      const group = [];
+      if (marker) group.push(marker.getLatLng());
+      if (myPosMarker) group.push(myPosMarker.getLatLng());
+      if (group.length === 0) return;
+      if (group.length === 1) return map.setView(group[0], Math.max(15, map.getZoom()), { animate: true });
+      map.fitBounds(L.latLngBounds(group).pad(0.25), { animate: true });
+    });
+
+    myPosBtn?.addEventListener('click', () => {
+      if (!navigator.geolocation) return showError('Seu navegador não suporta geolocalização.');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const ll = [pos.coords.latitude, pos.coords.longitude];
+          if (!myPosMarker) {
+            myPosMarker = L.marker(ll, { title:'Minha posição',
+              icon: L.icon({ iconUrl:'https://unpkg.com/leaflet@1.9.3/dist/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41] })
+            }).addTo(map).bindPopup('Minha posição');
+          } else myPosMarker.setLatLng(ll);
+          map.setView(ll, 15, { animate: true });
+        },
+        () => showError('Não foi possível obter sua posição. Permita o acesso à localização.')
+      );
+    });
+
+    // Copiar link (mantém o ID original + botão lateral)
+    async function copyRouteLink(){
+      try {
+        const u = new URL(location.href);
+        u.searchParams.set('route', routeId);
+        await navigator.clipboard.writeText(u.toString());
+        toast('Link copiado!');
+      } catch { showError('Falha ao copiar o link.'); }
+    }
+    copyLinkBtn?.addEventListener('click', copyRouteLink);
+    copyLinkBtnSide?.addEventListener('click', copyRouteLink);
+
+    // ---------- Helpers ----------
+    function unwrap(obj) {
+      if (Array.isArray(obj)) return unwrap(obj[0] ?? {});
+      if (obj && typeof obj === 'object' && 'data' in obj) return unwrap(obj.data);
+      return obj || {};
+    }
+    function normalizeLoc(d) {
+      const lat = Number(d.lat ?? d.latitude ?? d.Lat ?? d.Latitude ?? NaN);
+      const lng = Number(d.lng ?? d.longitude ?? d.Lon ?? d.Longitude ?? d.long ?? NaN);
+      const updated_at = d.updated_at ?? d.updatedAt ?? d.updated ?? d.ts ?? d.timestamp ?? null;
+      return { lat, lng, updated_at };
+    }
+    function setStatus(ok, msg) {
+      statusPill.textContent = msg || (ok ? 'Online' : 'Offline');
+      statusPill.className = 'chip px-3 py-2 rounded-xl text-xs text-white/90';
+      statusPill.style.background = ok ? 'rgba(16,185,129,.20)' : 'rgba(248,113,113,.22)';
+      statusPill.style.border = ok ? '1px solid rgba(16,185,129,.28)' : '1px solid rgba(248,113,113,.30)';
+    }
+    function ageString(msDiff) {
+      if (!Number.isFinite(msDiff)) return '—';
+      if (msDiff < 1000) return 'agora';
+      const s = Math.floor(msDiff / 1000);
+      if (s < 60) return `${s}s`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}min`;
+      const h = Math.floor(m / 60);
+      return `${h}h ${m % 60}min`;
+    }
+    function showError(message) {
+      errMsg.textContent = message || 'Erro inesperado.';
+      errBox.style.display = 'block';
+      setTimeout(() => { errBox.style.display = 'none'; }, 3200);
+    }
+    function toast(message) {
+      const el = document.createElement('div');
+      el.className = 'fixed bottom-5 right-5 bg-slate-900 text-white text-sm px-3 py-2 rounded-2xl opacity-0 transition shadow-glass border border-white/10';
+      el.textContent = message;
+      document.body.appendChild(el);
+      requestAnimationFrame(() => { el.style.opacity = '0.96'; });
+      setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 200); }, 1500);
+    }
+    function parseTs(v) {
+      if (v == null) return NaN;
+      const n = Number(v);
+      if (Number.isFinite(n)) return String(Math.trunc(n)).length === 10 ? n * 1000 : n;
+      const s = String(v).trim();
+      let t = Date.parse(s.replace(' ', 'T'));
+      if (!Number.isNaN(t)) return t;
+      t = Date.parse(s.replace(' ', 'T') + 'Z');
+      return Number.isNaN(t) ? NaN : t;
+    }
+
+    // ---------- Lógica de esconder após 15s ----------
+    function hideTruck() {
+      if (marker) { map.removeLayer(marker); marker = null; }
+      if (markerInline) { mapInline.removeLayer(markerInline); markerInline = null; }
+      setStatus(false, 'Offline');
+      latlngEl.textContent = '—';
+      infoLat.textContent = '—';
+      infoLng.textContent = '—';
+      infoTs.textContent  = '—';
+      infoAge.textContent = '—';
+      freshBadge.textContent = 'Antigo';
+      freshBadge.className = 'text-[11px] px-2 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200';
+    }
+    function armStaleWatchdog(ageMsNow) {
+      if (staleTimer) { clearTimeout(staleTimer); staleTimer = null; }
+      const remaining = Math.max(0, STALE_MS - ageMsNow);
+      staleTimer = setTimeout(() => hideTruck(), remaining + 30);
+    }
+
+    // ---------- Fetch loop ----------
+    let pollMs = pollSecondsDefault * 1000;
+    intervalLabel.textContent = String(pollSecondsDefault);
+    intervalRange.value = String(pollSecondsDefault);
+    intervalRange.addEventListener('input', () => {
+      intervalLabel.textContent = intervalRange.value;
+      pollMs = Number(intervalRange.value) * 1000;
+      restartPolling();
+    });
+
+    async function fetchLocation() {
+      try {
+        const res = await fetch(`${API_BASE}/get_location.php?route_id=${encodeURIComponent(routeId)}&t=${Date.now()}`, {
+          cache: 'no-store', headers: { 'Accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const raw = await res.json();
+        const obj = unwrap(raw);
+        const { lat, lng, updated_at } = normalizeLoc(obj);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) { hideTruck(); return; }
+
+        let serverTs = parseTs(updated_at);
+        if (Number.isFinite(serverTs)) lastSeenTs = serverTs;
+        if (lastSeenTs == null) lastSeenTs = Date.now();
+
+        const age = Date.now() - lastSeenTs;
+        if (age > STALE_MS) { hideTruck(); return; }
+
+        if (!marker) {
+          marker = L.marker([lat, lng], { icon: TruckIcon }).addTo(map);
+          marker.bindPopup(`<b>Rota ${routeId}</b>`);
+        } else marker.setLatLng([lat, lng]);
+
+        if (!markerInline) markerInline = L.marker([lat, lng], { icon: TruckIcon }).addTo(mapInline);
+        else markerInline.setLatLng([lat, lng]);
+
+        if (keepRecenter) { map.setView([lat, lng], Math.max(15, map.getZoom()), { animate: true }); keepRecenter = false; }
+        if (isFollowing) map.panTo([lat, lng], { animate: true });
+
+        setStatus(true, 'Online');
+
+        const tsText = (updated_at ? String(updated_at) : new Date(lastSeenTs).toLocaleString('pt-BR'));
+        lastUpdateEl.textContent = tsText;
+        latlngEl.textContent = `${lat.toFixed(6)} , ${lng.toFixed(6)}`;
+        infoLat.textContent = lat.toFixed(6);
+        infoLng.textContent = lng.toFixed(6);
+        infoTs.textContent  = tsText;
+        infoAge.textContent = ageString(age);
+
+        freshBadge.textContent = 'Atual';
+        freshBadge.className = 'text-[11px] px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+
+        mapInline.setView([lat, lng], Math.max(12, mapInline.getZoom()));
+        armStaleWatchdog(age);
+
+      } catch (err) {
+        showError('Erro ao buscar localização: ' + (err?.message || 'falha de rede'));
+        hideTruck();
+        console.error('Erro get_location:', err);
+      }
+    }
+
+    let timer = null;
+    function restartPolling() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(fetchLocation, pollMs);
+    }
+
+    refreshBtn.addEventListener('click', fetchLocation);
+
+    // Kickoff tracker
+    fetchLocation();
+    restartPolling();
+
+    // ======= Portal do Cidadão: lógica =======
+    function openPortal(){ portal.style.display='flex'; }
+    function closePortal(){ portal.style.display='none'; }
+    openPortalBtn.addEventListener('click', openPortal);
+    closePortalBtn.addEventListener('click', closePortal);
+    portal.addEventListener('click', (e)=>{ if(e.target===portal) closePortal(); });
+
+    function showCadastro(){
+      registerForm.classList.remove('hidden');
+      dashboard.classList.add('hidden');
+      tabCadastro.className='btn px-4 py-2 rounded-xl bg-slate-900 text-white text-sm';
+      tabDashboard.className='btn px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-sm text-slate-800';
+      setTimeout(()=>{ mapInline.invalidateSize(); }, 150);
+    }
+    function showDashboard(){
+      registerForm.classList.add('hidden');
+      dashboard.classList.remove('hidden');
+      tabCadastro.className='btn px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-sm text-slate-800';
+      tabDashboard.className='btn px-4 py-2 rounded-xl bg-slate-900 text-white text-sm';
+      setTimeout(()=>{ mapInline.invalidateSize(); }, 150);
+    }
+    tabCadastro.addEventListener('click', showCadastro);
+    tabDashboard.addEventListener('click', showDashboard);
+
+    // LocalStorage helpers
+    const LS_KEY = 'riofaz_portal_profile';
+    function loadProfile(){
+      try{ const s = localStorage.getItem(LS_KEY); if(!s) return null; return JSON.parse(s); }
+      catch{ return null; }
+    }
+    function saveProfile(p){ localStorage.setItem(LS_KEY, JSON.stringify(p)); }
+
+    // formatação telefone BR simples
+    function formatPhone(v){
+      const d = String(v||'').replace(/\D/g,'').slice(0,11);
+      if(d.length<=10) return d.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3').trim();
+      return d.replace(/^(\d{2})(\d{5})(\d{0,4}).*/, '($1) $2-$3').trim();
+    }
+    phoneEl.addEventListener('input', ()=>{ phoneEl.value = formatPhone(phoneEl.value); });
+
+    // ViaCEP
+    async function fetchViaCEP(cep){
+      const clean = String(cep||'').replace(/\D/g,'');
+      if(clean.length!==8) throw new Error('CEP inválido');
+      const r = await fetch(`https://viacep.com.br/ws/${clean}/json/`, { cache:'no-store' });
+      if(!r.ok) throw new Error('Falha ao consultar CEP');
+      const j = await r.json();
+      if(j.erro) throw new Error('CEP não encontrado');
+      return j;
+    }
+    btnFetchCep.addEventListener('click', async ()=>{
+      try{
+        const j = await fetchViaCEP(cepEl.value);
+        logradouroEl.value = j.logradouro || logradouroEl.value;
+        bairroEl.value = j.bairro || bairroEl.value;
+        cidadeEl.value = j.localidade || cidadeEl.value;
+        ufEl.value = j.uf || ufEl.value;
+      }catch(e){
+        showError(e.message || 'Erro ao buscar CEP');
+      }
+    });
+
+    // Submit cadastro
+    registerForm.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const profile = {
+        name: nameEl.value.trim(),
+        phone: phoneEl.value.trim(),
+        cep: cepEl.value.trim(),
+        logradouro: logradouroEl.value.trim(),
+        numero: numeroEl.value.trim(),
+        complemento: complementoEl.value.trim(),
+        bairro: bairroEl.value.trim(),
+        cidade: cidadeEl.value.trim(),
+        uf: ufEl.value.trim().toUpperCase()
+      };
+      if(!profile.name || !profile.phone || !profile.cep || !profile.logradouro || !profile.bairro || !profile.cidade || !profile.uf){
+        showError('Preencha os campos obrigatórios.');
+        return;
+      }
+      saveProfile(profile);
+      hydrateDashboard(profile);
+      showDashboard();
+      toast('Cadastro salvo!');
+    });
+
+    // Editar perfil
+    document.getElementById('editProfile').addEventListener('click', showCadastro);
+
+    // Preenche dashboard (placeholders)
+    function hydrateDashboard(p){
+      userNameEl.textContent = p?.name || 'Cidadão';
+      routeScheduleEl.textContent = p?.bairro ? `Bairro ${p.bairro} — toda 3ª feira` : '—';
+      routeTimeEl.textContent = '08:00–12:00';
+      nextPickupEl.textContent = 'Próxima 3ª feira, 09:00';
+    }
+
+    // Inicializa portal
+    (function initPortal(){
+      const p = loadProfile();
+      if(p){
+        nameEl.value = p.name || '';
+        phoneEl.value = p.phone || '';
+        cepEl.value = p.cep || '';
+        logradouroEl.value = p.logradouro || '';
+        numeroEl.value = p.numero || '';
+        complementoEl.value = p.complemento || '';
+        bairroEl.value = p.bairro || '';
+        cidadeEl.value = p.cidade || '';
+        ufEl.value = p.uf || '';
+        hydrateDashboard(p);
+        showDashboard();
+      } else {
+        showCadastro();
+      }
+    })();
+  </script>
+</body>
+</html>

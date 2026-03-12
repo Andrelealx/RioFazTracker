@@ -1,0 +1,25 @@
+{
+  "name": "Tracker RioFaz",
+  "short_name": "RioFaz",
+  "start_url": "/tracker.html?route_id=coleta1&source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/logo-reciclaguapi.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-reciclaguapi.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
