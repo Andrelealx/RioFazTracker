@@ -2,6 +2,7 @@ import "reflect-metadata";
 import fs from "node:fs";
 import path from "node:path";
 import { UserRole } from "@prisma/client";
+import { hash } from "bcryptjs";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
@@ -65,6 +66,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const jwtService = app.get(JwtService);
   const prismaService = app.get(PrismaService);
+  await ensureBootstrapAdmin(configService, prismaService, logger);
 
   const trackerGate: TrackerGateContext = {
     accessCookieName: configService.get<string>("ACCESS_COOKIE_NAME") || "riofaz_access",
@@ -211,4 +213,46 @@ function resolvePrivateDirectory(): string | null {
   }
 
   return null;
+}
+
+async function ensureBootstrapAdmin(
+  configService: ConfigService,
+  prismaService: PrismaService,
+  logger: Logger
+): Promise<void> {
+  const emailRaw = configService.get<string>("INITIAL_ADMIN_EMAIL");
+  const passwordRaw = configService.get<string>("INITIAL_ADMIN_PASSWORD");
+  const nameRaw = configService.get<string>("INITIAL_ADMIN_NAME");
+
+  const email = emailRaw?.trim().toLowerCase();
+  const password = passwordRaw?.trim();
+  const name = nameRaw?.trim() || "Administrador";
+
+  if (!email || !password) {
+    return;
+  }
+
+  try {
+    const passwordHash = await hash(password, 12);
+    await prismaService.user.upsert({
+      where: { email },
+      update: {
+        name,
+        passwordHash,
+        role: UserRole.ADMIN,
+        isActive: true
+      },
+      create: {
+        name,
+        email,
+        passwordHash,
+        role: UserRole.ADMIN,
+        isActive: true
+      }
+    });
+
+    logger.log(`Bootstrap admin ensured for ${email}`);
+  } catch (error) {
+    logger.error(`Failed to ensure bootstrap admin for ${email}`, error as Error);
+  }
 }
