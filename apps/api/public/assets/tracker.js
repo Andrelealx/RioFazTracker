@@ -33,6 +33,8 @@ const timeStartInput = document.getElementById("timeStartInput");
 const timeEndInput = document.getElementById("timeEndInput");
 const clearRouteBtn = document.getElementById("clearRouteBtn");
 const deleteRouteBtn = document.getElementById("deleteRouteBtn");
+const startTrackerBtn = document.getElementById("startTrackerBtn");
+const stopTrackerBtn = document.getElementById("stopTrackerBtn");
 
 const WEEKDAY_LABELS = [
   "Domingo",
@@ -59,6 +61,16 @@ function appendLog(message, payload) {
     payload ? ` | ${JSON.stringify(payload)}` : ""
   }`;
   logOutput.textContent = `${line}\n${logOutput.textContent}`.trim();
+}
+
+function updateTrackerButtons() {
+  const active = state.watchId !== null;
+  if (startTrackerBtn) {
+    startTrackerBtn.disabled = active;
+  }
+  if (stopTrackerBtn) {
+    stopTrackerBtn.disabled = !active;
+  }
 }
 
 function setAccessToken(token) {
@@ -581,6 +593,7 @@ function startWatch() {
 
   if (state.watchId !== null) {
     showStatus("Envio continuo ja esta ativo.", "ok");
+    updateTrackerButtons();
     return;
   }
 
@@ -609,6 +622,7 @@ function startWatch() {
 
   appendLog("Envio continuo iniciado", { watchId: state.watchId });
   showStatus("Envio continuo de localizacao ativo.", "ok");
+  updateTrackerButtons();
 }
 
 function stopWatch() {
@@ -617,6 +631,7 @@ function stopWatch() {
     appendLog("Envio continuo parado", { watchId: state.watchId });
     state.watchId = null;
   }
+  updateTrackerButtons();
 }
 
 async function ensureAdminSession() {
@@ -805,19 +820,24 @@ document.getElementById("sendNowBtn").addEventListener("click", async () => {
   }
 });
 
-document.getElementById("sendWatchBtn").addEventListener("click", () => {
-  clearStatus();
-  try {
-    startWatch();
-  } catch (error) {
-    showStatus(error.message, "warn");
-  }
-});
+if (startTrackerBtn) {
+  startTrackerBtn.addEventListener("click", () => {
+    clearStatus();
+    try {
+      startWatch();
+      showStatus("Tracker iniciado com envio continuo.", "ok");
+    } catch (error) {
+      showStatus(error.message, "warn");
+    }
+  });
+}
 
-document.getElementById("stopWatchBtn").addEventListener("click", () => {
-  stopWatch();
-  showStatus("Envio continuo encerrado.", "ok");
-});
+if (stopTrackerBtn) {
+  stopTrackerBtn.addEventListener("click", () => {
+    stopWatch();
+    showStatus("Tracker parado.", "ok");
+  });
+}
 
 routeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -873,6 +893,7 @@ window.addEventListener("beforeunload", () => {
 weekdayInput.value = "1";
 timeStartInput.value = "08:00";
 timeEndInput.value = "12:00";
+updateTrackerButtons();
 
 void bootstrap().catch((error) => {
   appendLog("Erro ao iniciar tracker", { message: error.message });
