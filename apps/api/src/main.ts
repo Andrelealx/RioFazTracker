@@ -1,6 +1,7 @@
 ﻿import "reflect-metadata";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { Request, Response } from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
@@ -46,6 +47,16 @@ async function bootstrap() {
   );
 
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  const httpAdapter = app.getHttpAdapter().getInstance();
+  httpAdapter.get("/", (_request: Request, response: Response) => {
+    response.status(200).json({
+      name: "RioFazTracker API",
+      status: "ok",
+      docs: "/api/health",
+      timestamp: new Date().toISOString()
+    });
+  });
 
   const port = Number(process.env.PORT || process.env.API_PORT || 3001);
   await app.listen(port);
