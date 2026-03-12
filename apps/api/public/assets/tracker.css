@@ -264,6 +264,36 @@ input:focus {
   font-size: 0.8rem;
 }
 
+.schedule-list {
+  margin-top: 12px;
+}
+
+.schedule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.schedule-text {
+  font-weight: 700;
+  color: #214b41;
+  font-size: 0.86rem;
+}
+
+.danger-link {
+  border: 1px solid rgba(184, 52, 42, 0.3);
+  background: rgba(184, 52, 42, 0.1);
+  color: #912c23;
+  border-radius: 10px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

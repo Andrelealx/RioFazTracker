@@ -20,6 +20,29 @@ const routeSelect = document.getElementById("routeSelect");
 const routeList = document.getElementById("routeList");
 const mapMeta = document.getElementById("mapMeta");
 const logOutput = document.getElementById("logOutput");
+const routeForm = document.getElementById("routeForm");
+const routeCodeInput = document.getElementById("routeCodeInput");
+const routeNameInput = document.getElementById("routeNameInput");
+const routeNeighborhoodInput = document.getElementById("routeNeighborhoodInput");
+const routeCityInput = document.getElementById("routeCityInput");
+const routeUfInput = document.getElementById("routeUfInput");
+const scheduleForm = document.getElementById("scheduleForm");
+const scheduleAdminList = document.getElementById("scheduleAdminList");
+const weekdayInput = document.getElementById("weekdayInput");
+const timeStartInput = document.getElementById("timeStartInput");
+const timeEndInput = document.getElementById("timeEndInput");
+const clearRouteBtn = document.getElementById("clearRouteBtn");
+const deleteRouteBtn = document.getElementById("deleteRouteBtn");
+
+const WEEKDAY_LABELS = [
+  "Domingo",
+  "Segunda",
+  "Terca",
+  "Quarta",
+  "Quinta",
+  "Sexta",
+  "Sabado"
+];
 
 function showStatus(message, type = "ok") {
   statusBanner.className = `status-banner ${type}`;
@@ -137,6 +160,17 @@ function formatDate(value) {
   return new Date(value).toLocaleString("pt-BR");
 }
 
+function normalizeRouteCode(value) {
+  return (value || "").trim().toLowerCase();
+}
+
+function getSelectedRoute() {
+  if (!state.selectedRouteCode) {
+    return null;
+  }
+  return state.routes.find((route) => route.code === state.selectedRouteCode) || null;
+}
+
 function signalLabel(capturedAt) {
   if (!capturedAt) {
     return "Sem sinal";
@@ -149,6 +183,82 @@ function signalLabel(capturedAt) {
     return `Recente (${age}s)`;
   }
   return `Sem atualizacao (${Math.floor(age / 60)} min)`;
+}
+
+function buildNeighborhoodPayload() {
+  const name = routeNeighborhoodInput.value.trim();
+  const city = routeCityInput.value.trim();
+  const uf = routeUfInput.value.trim().toUpperCase();
+
+  const hasAny = Boolean(name || city || uf);
+  const hasAll = Boolean(name && city && uf);
+  if (hasAny && !hasAll) {
+    throw new Error("Preencha bairro, cidade e UF para vincular a rota.");
+  }
+
+  if (!hasAll) {
+    return undefined;
+  }
+
+  return { name, city, uf };
+}
+
+function fillRouteForm(route) {
+  if (!route) {
+    routeCodeInput.value = "";
+    routeNameInput.value = "";
+    routeNeighborhoodInput.value = "";
+    routeCityInput.value = "";
+    routeUfInput.value = "";
+    renderScheduleAdminList(null);
+    return;
+  }
+
+  routeCodeInput.value = route.code;
+  routeNameInput.value = route.name;
+  routeNeighborhoodInput.value = route.neighborhood?.name || "";
+  routeCityInput.value = route.neighborhood?.city || "";
+  routeUfInput.value = route.neighborhood?.uf || "";
+  renderScheduleAdminList(route);
+}
+
+function renderScheduleAdminList(route) {
+  scheduleAdminList.innerHTML = "";
+  if (!route || !Array.isArray(route.schedules) || route.schedules.length === 0) {
+    const item = document.createElement("li");
+    item.className = "route-item";
+    item.textContent = "Sem horarios cadastrados para a rota selecionada.";
+    scheduleAdminList.appendChild(item);
+    return;
+  }
+
+  const sorted = route.schedules.slice().sort((a, b) => a.weekday - b.weekday);
+  for (const schedule of sorted) {
+    const item = document.createElement("li");
+    item.className = "route-item";
+
+    const row = document.createElement("div");
+    row.className = "schedule-row";
+
+    const text = document.createElement("span");
+    text.className = "schedule-text";
+    text.textContent = `${WEEKDAY_LABELS[schedule.weekday] || `Dia ${schedule.weekday}`} | ${
+      schedule.timeStart
+    } - ${schedule.timeEnd}`;
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "danger-link";
+    removeButton.textContent = "Excluir";
+    removeButton.addEventListener("click", () => {
+      void deleteScheduleForRoute(route.code, schedule.weekday);
+    });
+
+    row.appendChild(text);
+    row.appendChild(removeButton);
+    item.appendChild(row);
+    scheduleAdminList.appendChild(item);
+  }
 }
 
 function renderRouteSelector() {
@@ -199,9 +309,10 @@ function renderRouteList() {
       ? `${route.neighborhood.name}/${route.neighborhood.city}-${route.neighborhood.uf}`
       : "Sem bairro vinculado";
     const scheduleCount = Array.isArray(route.schedules) ? route.schedules.length : 0;
+    const signal = signalLabel(route.currentLocation?.capturedAt);
     const subtitle = document.createElement("div");
     subtitle.className = "route-sub";
-    subtitle.textContent = `${neighborhood} | ${scheduleCount} horario(s)`;
+    subtitle.textContent = `${neighborhood} | ${scheduleCount} horario(s) | ${signal}`;
 
     item.appendChild(title);
     item.appendChild(subtitle);
@@ -211,6 +322,7 @@ function renderRouteList() {
       routeSelect.value = route.code;
       renderRouteList();
       syncManualRouteCode();
+      fillRouteForm(route);
       void refreshMapData();
     });
 
@@ -549,6 +661,98 @@ async function loadRoutes() {
   renderRouteSelector();
   renderRouteList();
   syncManualRouteCode();
+  fillRouteForm(getSelectedRoute());
+}
+
+async function saveRouteFromForm() {
+  const code = normalizeRouteCode(routeCodeInput.value);
+  const name = routeNameInput.value.trim();
+  if (!code) {
+    throw new Error("Informe o codigo da rota.");
+  }
+  if (!name) {
+    throw new Error("Informe o nome da rota.");
+  }
+
+  const neighborhood = buildNeighborhoodPayload();
+  const existing = state.routes.find((route) => route.code === code);
+  if (existing) {
+    await apiRequest(`/routes/admin/${encodeURIComponent(code)}`, {
+      method: "PATCH",
+      body: {
+        name,
+        neighborhood
+      }
+    });
+  } else {
+    await apiRequest("/routes/admin", {
+      method: "POST",
+      body: {
+        code,
+        name,
+        neighborhood
+      }
+    });
+  }
+
+  state.selectedRouteCode = code;
+  await loadRoutes();
+  await refreshMapData();
+  showStatus(`Rota ${code} salva com sucesso.`, "ok");
+}
+
+async function deleteRouteFromForm() {
+  const code = normalizeRouteCode(routeCodeInput.value || state.selectedRouteCode);
+  if (!code) {
+    throw new Error("Selecione uma rota para excluir.");
+  }
+
+  await apiRequest(`/routes/admin/${encodeURIComponent(code)}`, {
+    method: "DELETE"
+  });
+
+  state.selectedRouteCode = null;
+  await loadRoutes();
+  await refreshMapData();
+  showStatus(`Rota ${code} removida.`, "ok");
+}
+
+async function saveScheduleForRoute() {
+  const code = normalizeRouteCode(routeCodeInput.value || state.selectedRouteCode);
+  if (!code) {
+    throw new Error("Informe a rota para salvar o horario.");
+  }
+
+  const weekday = Number(weekdayInput.value);
+  const timeStart = (timeStartInput.value || "").trim();
+  const timeEnd = (timeEndInput.value || "").trim();
+  if (!timeStart || !timeEnd) {
+    throw new Error("Informe horario de inicio e fim.");
+  }
+
+  await apiRequest(`/routes/admin/${encodeURIComponent(code)}/schedules`, {
+    method: "POST",
+    body: {
+      weekday,
+      timeStart,
+      timeEnd
+    }
+  });
+
+  state.selectedRouteCode = code;
+  await loadRoutes();
+  await refreshMapData();
+  showStatus(`Horario salvo para rota ${code}.`, "ok");
+}
+
+async function deleteScheduleForRoute(code, weekday) {
+  await apiRequest(`/routes/admin/${encodeURIComponent(code)}/schedules/${weekday}`, {
+    method: "DELETE"
+  });
+  state.selectedRouteCode = code;
+  await loadRoutes();
+  await refreshMapData();
+  showStatus(`Horario removido da rota ${code}.`, "ok");
 }
 
 async function bootstrap() {
@@ -571,6 +775,7 @@ routeSelect.addEventListener("change", () => {
   state.selectedRouteCode = routeSelect.value || null;
   renderRouteList();
   syncManualRouteCode();
+  fillRouteForm(getSelectedRoute());
   void refreshMapData();
 });
 
@@ -614,6 +819,40 @@ document.getElementById("stopWatchBtn").addEventListener("click", () => {
   showStatus("Envio continuo encerrado.", "ok");
 });
 
+routeForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  clearStatus();
+  try {
+    await saveRouteFromForm();
+  } catch (error) {
+    showStatus(error.message, "warn");
+  }
+});
+
+clearRouteBtn.addEventListener("click", () => {
+  fillRouteForm(null);
+  showStatus("Formulario de rota limpo.", "ok");
+});
+
+deleteRouteBtn.addEventListener("click", async () => {
+  clearStatus();
+  try {
+    await deleteRouteFromForm();
+  } catch (error) {
+    showStatus(error.message, "warn");
+  }
+});
+
+scheduleForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  clearStatus();
+  try {
+    await saveScheduleForRoute();
+  } catch (error) {
+    showStatus(error.message, "warn");
+  }
+});
+
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   stopAutoRefresh();
   stopWatch();
@@ -630,6 +869,10 @@ window.addEventListener("beforeunload", () => {
   stopAutoRefresh();
   stopWatch();
 });
+
+weekdayInput.value = "1";
+timeStartInput.value = "08:00";
+timeEndInput.value = "12:00";
 
 void bootstrap().catch((error) => {
   appendLog("Erro ao iniciar tracker", { message: error.message });

@@ -74,6 +74,79 @@
         </article>
       </section>
 
+      <section class="layout">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>Cadastro e edicao de rotas</h3>
+          </div>
+          <form id="routeForm">
+            <div class="row">
+              <div class="field">
+                <label for="routeCodeInput">Codigo da rota</label>
+                <input id="routeCodeInput" placeholder="coleta1" required />
+              </div>
+              <div class="field">
+                <label for="routeNameInput">Nome da rota</label>
+                <input id="routeNameInput" placeholder="Rota Centro" required />
+              </div>
+              <div class="field">
+                <label for="routeNeighborhoodInput">Bairro</label>
+                <input id="routeNeighborhoodInput" placeholder="Centro" />
+              </div>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="routeCityInput">Cidade</label>
+                <input id="routeCityInput" placeholder="Guapimirim" />
+              </div>
+              <div class="field">
+                <label for="routeUfInput">UF</label>
+                <input id="routeUfInput" maxlength="2" placeholder="RJ" />
+              </div>
+            </div>
+            <div class="manual-actions">
+              <button id="saveRouteBtn" class="button primary" type="submit">Salvar rota</button>
+              <button id="clearRouteBtn" class="button ghost" type="button">Limpar formulario</button>
+              <button id="deleteRouteBtn" class="button warn" type="button">Excluir rota</button>
+            </div>
+          </form>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h3>Horarios da rota</h3>
+          </div>
+          <form id="scheduleForm">
+            <div class="row">
+              <div class="field">
+                <label for="weekdayInput">Dia da semana</label>
+                <select id="weekdayInput">
+                  <option value="0">Domingo</option>
+                  <option value="1">Segunda</option>
+                  <option value="2">Terca</option>
+                  <option value="3">Quarta</option>
+                  <option value="4">Quinta</option>
+                  <option value="5">Sexta</option>
+                  <option value="6">Sabado</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="timeStartInput">Inicio</label>
+                <input id="timeStartInput" type="time" step="60" />
+              </div>
+              <div class="field">
+                <label for="timeEndInput">Fim</label>
+                <input id="timeEndInput" type="time" step="60" />
+              </div>
+            </div>
+            <div class="manual-actions">
+              <button id="saveScheduleBtn" class="button primary" type="submit">Salvar horario</button>
+            </div>
+          </form>
+          <ul id="scheduleAdminList" class="route-list schedule-list"></ul>
+        </article>
+      </section>
+
       <section class="panel">
         <div class="panel-head">
           <h3>Envio manual de localizacao (simulacao)</h3>
