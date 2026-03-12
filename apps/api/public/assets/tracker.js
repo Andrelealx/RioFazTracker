@@ -9,10 +9,16 @@ const state = {
   marker: null,
   polyline: null,
   watchId: null,
+  sendTimer: null,
+  latestPosition: null,
+  sendingTick: false,
   lastSendAt: 0,
   lastLat: null,
   lastLng: null
 };
+
+const TRACKER_SEND_INTERVAL_MS = 3000;
+const MAP_REFRESH_INTERVAL_MS = 3000;
 
 const statusBanner = document.getElementById("statusBanner");
 const adminBadge = document.getElementById("adminBadge");
@@ -64,7 +70,7 @@ function appendLog(message, payload) {
 }
 
 function updateTrackerButtons() {
-  const active = state.watchId !== null;
+  const active = state.sendTimer !== null;
   if (startTrackerBtn) {
     startTrackerBtn.disabled = active;
   }
@@ -463,40 +469,7 @@ function startAutoRefresh() {
   }
   state.autoTimer = setInterval(() => {
     void refreshMapData();
-  }, 8000);
-}
-
-function distanceInMeters(lat1, lng1, lat2, lng2) {
-  const toRad = (value) => (value * Math.PI) / 180;
-  const earth = 6371000;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * earth * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function shouldSend(position) {
-  if (!state.lastSendAt) {
-    return true;
-  }
-
-  const elapsed = Date.now() - state.lastSendAt;
-  if (elapsed >= 15000) {
-    return true;
-  }
-
-  if (state.lastLat == null || state.lastLng == null) {
-    return true;
-  }
-
-  const distance = distanceInMeters(
-    state.lastLat,
-    state.lastLng,
-    position.coords.latitude,
-    position.coords.longitude
-  );
-  return distance >= 20;
+  }, MAP_REFRESH_INTERVAL_MS);
 }
 
 function readManualConfig() {
@@ -564,13 +537,15 @@ async function sendNow() {
     throw new Error("Geolocalizacao nao suportada neste navegador.");
   }
 
+  const position = await requestCurrentPosition();
+  state.latestPosition = position;
+  return sendPosition(position);
+}
+
+async function requestCurrentPosition() {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        void sendPosition(position)
-          .then(resolve)
-          .catch(reject);
-      },
+      (position) => resolve(position),
       (error) => reject(new Error(error.message)),
       {
         enableHighAccuracy: true,
@@ -580,42 +555,62 @@ async function sendNow() {
   });
 }
 
+async function sendTrackerTick() {
+  if (state.sendingTick) {
+    return;
+  }
+  state.sendingTick = true;
+  try {
+    let position = state.latestPosition;
+    if (!position) {
+      position = await requestCurrentPosition();
+      state.latestPosition = position;
+    }
+    await sendPosition(position);
+  } catch (error) {
+    appendLog("Falha ao enviar localizacao", { message: error.message });
+    showStatus(error.message, "warn");
+  } finally {
+    state.sendingTick = false;
+  }
+}
+
 function startWatch() {
   if (!navigator.geolocation) {
     throw new Error("Geolocalizacao nao suportada neste navegador.");
   }
 
-  if (state.watchId !== null) {
+  if (state.sendTimer !== null) {
     showStatus("Envio continuo ja esta ativo.", "ok");
     updateTrackerButtons();
     return;
   }
 
+  const config = readManualConfig();
+  if (!config.routeCode) {
+    throw new Error("Preencha a rota antes de iniciar o tracker.");
+  }
+
   state.watchId = navigator.geolocation.watchPosition(
     (position) => {
-      appendLog("Posicao recebida", {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        accuracy: position.coords.accuracy
-      });
-      if (!shouldSend(position)) {
-        return;
-      }
-      void sendPosition(position).catch((error) => {
-        appendLog("Falha ao enviar localizacao", { message: error.message });
-        showStatus(error.message, "warn");
-      });
+      state.latestPosition = position;
     },
     onGeoError,
     {
       enableHighAccuracy: true,
-      maximumAge: 5000,
+      maximumAge: 1500,
       timeout: 15000
     }
   );
 
-  appendLog("Envio continuo iniciado", { watchId: state.watchId });
-  showStatus("Envio continuo de localizacao ativo.", "ok");
+  state.sendTimer = setInterval(() => {
+    void sendTrackerTick();
+  }, TRACKER_SEND_INTERVAL_MS);
+
+  void sendTrackerTick();
+
+  appendLog("Envio continuo iniciado", { watchId: state.watchId, intervalMs: TRACKER_SEND_INTERVAL_MS });
+  showStatus("Tracker ativo: enviando localizacao a cada 3 segundos.", "ok");
   updateTrackerButtons();
 }
 
@@ -625,6 +620,12 @@ function stopWatch() {
     appendLog("Envio continuo parado", { watchId: state.watchId });
     state.watchId = null;
   }
+  if (state.sendTimer !== null) {
+    clearInterval(state.sendTimer);
+    state.sendTimer = null;
+  }
+  state.latestPosition = null;
+  state.sendingTick = false;
   updateTrackerButtons();
 }
 
